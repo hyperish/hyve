@@ -32,16 +32,16 @@ pub trait ProjectService {
 
 > 위 코드 블록은 DX 방향을 설명하기 위한 스케치이며, 구체 매크로 이름과 어트리뷰트 문법은 [`04-open-questions.md`](04-open-questions.md) #1에서 확정합니다.
 
-## 2. 통합 개발 환경 CLI (`hyper`)
+## 2. 올인원 개발 환경 CLI (`hyper` — Bun 포지션)
 
-복잡한 빌드 스크립트나 타깃별 도구 체인을 개발자가 직접 조합하지 않도록 `hyper` CLI가 단일 진입점을 제공합니다.
+Node.js에서 `npm` + `vite` + `vitest` + `eslint`를 따로 설치·설정하던 것을 `bun` 하나로 통합했듯, Rust에서 `cargo` + `cargo-watch` + `trunk` + `wasm-bindgen` + `cargo-nextest` + `clippy`를 개발자가 직접 조합하지 않도록 `hyper` CLI가 **Cargo 워크스페이스 위에서 동작하는 올인원 슈퍼셋 진입점**을 제공합니다.
 
-| 명령 | 역할 | 동작 방향 (제안) |
+| 명령 | 역할 (Bun 대응) | 동작 방향 (제안) |
 |---|---|---|
-| `hyper init` | 프로젝트·크레이트 초기화 | 풀스택(`ring`+`lace`/`hera`), 웹 단독(`lace`), 네이티브 단독(`hera`), 백엔드 단독(`ring`) 스타터 템플릿을 즉시 생성하고 수 분 내 실행 가능한 기본 예제를 포함 |
-| `hyper preview` | 실시간 미리보기·핫리로드 | 코드·DSL 변경 시 웹(`lace`) 뷰포트, 네이티브(`hera`) 창, 백엔드(`ring`) 로컬 서버를 즉시 리로드하고 상태(state)를 보존 |
+| `hyper init` | 프로젝트·크레이트 초기화 (`bun init` / `create`) | 풀스택(`ring`+`lace`/`hera`), 웹 단독(`lace`), 네이티브 단독(`hera`), 백엔드 단독(`ring`) 스타터 템플릿을 즉시 생성하고 수 분 내 실행 가능한 기본 예제를 포함 |
+| `hyper preview` | 실시간 미리보기·핫리로드 (`bun --hot` / dev server) | 코드·DSL 변경 시 웹(`lace`) 뷰포트, 네이티브(`hera`) 창, 백엔드(`ring`) 로컬 서버를 즉시 리로드하고 상태(state)를 보존 |
 | `hyper lint` | 정적 검사·포맷·규약 검증 | `rustfmt`/`clippy`뿐 아니라 하이퍼리쉬 DSL 규약, 코어 경계 위반(코어에 어댑터 타입 유입 등), API 스키마 호환성을 함께 진단 |
-| `hyper test` | 통합 테스트 러너 | 단위 테스트, proc macro 전개·컴파일 타임 오류 스냅샷 테스트, 어댑터 계약 테스트를 일괄 실행 |
+| `hyper test` | 통합 고속 테스트 러너 (`bun test`) | 단위 테스트, proc macro 전개·컴파일 타임 오류 스냅샷 테스트, 어댑터 계약 테스트를 단일 러너로 일괄 고속 실행 |
 
 ## 3. 진단 메시지 원칙
 
