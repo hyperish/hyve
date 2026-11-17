@@ -1,8 +1,10 @@
 # hyperish/hyper
 
-하이퍼리쉬(Hyperish) 제품군과 프레임워크 패밀리(`ring`, `lace`, `hera`) 전체를 아우르는 **코어 개발 프레임워크 및 통합 툴체인** 레포입니다.
+하이퍼리쉬(Hyperish) 제품군과 프레임워크 패밀리(`ring`, `lace`, `hera`) 전체를 아우르는 **올인원(All-in-One) 코어 개발 프레임워크 및 툴체인** 레포입니다.
 
-프로젝트 초기화(`init`), 실시간 미리보기(`preview`), 정적 검사(`lint`), 테스트(`test`) 등 개발 생명주기 전반의 생산성을 관리하며, 반응형 상태성(state/reactivity)·직렬화(serialization)·파서(parser)·통합 API 규격 인터페이스 등 **모든 타깃 레이어가 수직 통합을 위해 참조(ref)하는 범용 코어 모듈**을 소유합니다.
+> **포지셔닝: 기존 Rust / Cargo 생태계가 Node.js라면, `hyper`는 Bun입니다.**
+
+파편화된 서드파티 크레이트와 빌드 도구(`cargo-watch`, `trunk`, `wasm-bindgen`, 별도 테스트·린트 러너, 제각각인 직렬화·파서·상태 크레이트)를 일일이 조합하는 대신, **하나의 수직 통합된 CLI(`init`, `preview`, `lint`, `test`, `build`)와 배터리 포함(batteries-included) 코어 표준 라이브러리(상태성·직렬화·파서·통합 API 규격 인터페이스)**를 제공해 모든 타깃 레이어(`ring`, `lace`, `hera`)가 단일 기준(`ref`)으로 참조하게 합니다.
 
 상위 범용 명세는 [`hyperish/docs`](https://github.com/hyperish/docs)를 따릅니다.
 
