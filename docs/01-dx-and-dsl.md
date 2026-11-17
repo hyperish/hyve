@@ -1,36 +1,46 @@
 # 01. DX 및 DSL 설계 (hyper)
 
-> 상태: Dioxus `rsx!`·매크로 레퍼런스 및 `init`/`preview`/`lint`/`test` 범위는 **확정**, 구체 문법은 **제안/미정** · 기준일: 2026-11-17
+> 상태: QML/Slint·Dioxus `rsx!`·GPUI 빌더 병행 원칙, `lace`·`hera` 공통 UI 문법, `init`/`preview`/`lint`/`test` 범위는 **확정**, 세부 키워드는 **제안/미정** · 기준일: 2026-11-17
 
-`hyper`의 목표는 개발자가 백엔드(`ring`), 웹(`lace`), 네이티브(`hera`) 어느 계층을 작성하든 **하나의 일관된 매크로 감각과 하나의 CLI 도구**로 즉시 결과물을 확인하게 하는 것입니다. 범용 원칙은 `hyperish/docs`의 `01-dx-principles.md`를 따릅니다.
+`hyper`의 목표는 개발자가 백엔드(`ring`), 웹(`lace`), 네이티브(`hera`) 어느 계층을 작성하든 **하나의 일관된 표현 감각과 하나의 CLI 도구**로 즉시 결과물을 확인하게 하는 것입니다. 범용 원칙은 `hyperish/docs`의 `01-dx-principles.md`를 따릅니다.
 
-## 1. 매크로 & DSL 설계 (레퍼런스: Dioxus `rsx!`)
+## 1. 매크로 DSL(QML/Slint·Dioxus)과 순수 Rust 빌더(GPUI)의 조화
 
-- **읽기 쉬운 선언적 구조**: Dioxus의 `rsx!`와 컴포넌트·속성 매크로처럼 중첩 구조와 상태 바인딩, 이벤트/핸들러 연결이 한눈에 읽히는 문법을 지향합니다.
-- **컴파일 타임 검증**: 스키마 불일치, 누락된 필수 필드, 잘못된 상태 참조, 허용되지 않는 속성 조합은 런타임이 아니라 **proc macro 전개 시점의 컴파일러 진단 메시지**로 잡습니다.
-- **Rust로의 자연스러운 탈출구**: 매크로 내부 표현식은 표준 Rust 코드와 자연스럽게 섞여야 하며, 매크로 없이 하위 빌더/트레이트 API(`hyper_core`)를 직접 호출해도 100% 동일한 동작을 구성할 수 있어야 합니다.
+- **QML 기반 Slint 스타일 + Dioxus `rsx!` 레퍼런스**: UI와 선언적 구조에서는 QML/Slint처럼 프로퍼티·바인딩·상태·계층이 깔끔하게 읽히는 문법과 Dioxus `rsx!`의 직관성을 결합합니다.
+- **DSL 비강제 (GPUI식 순수 Rust 빌더 동등 지원)**: GPUI처럼 매크로 DSL 없이 순수 Rust 메서드 체이닝·빌더만으로도 가독성이 충분한 곳에서는 굳이 DSL을 쓰지 않아도 됩니다. DSL 매크로는 결국 동일한 Rust 빌더 코드로 전개되므로 두 방식을 자유롭게 섞어 쓸 수 있습니다.
+- **`lace`(웹)와 `hera`(네이티브)의 단일 공통 UI 문법**:
+  - `hyper-parser`와 `hyper-macros`가 **공통 UI 문법**을 제공하여, `lace`와 `hera`는 완전히 같은 UI 문법 구조를 씁니다.
+  - 기본 컴포넌트·레이아웃·바인딩 문법은 동일하고, 그 안에 웹(DOM) 전용 기능/어트리뷰트가 들어가면 `lace`로, 네이티브(OS/GPU) 전용 기능이 들어가면 `hera`로 나뉩니다.
+- **컴파일 타임 검증**: 스키마 불일치, 누락된 필수 프로퍼티, 잘못된 상태 바인딩, 타깃에 맞지 않는 기능 사용은 런타임이 아니라 **컴파일러 진단 메시지**로 잡습니다.
 
 ### 개념 스케치 (제안 — 구체 문법은 미정)
 
 ```rust
 use hyper::prelude::*;
 
-// API/도메인 계약과 상태 모델을 선언적으로 정의하고 ring·lace·hera가 함께 참조
-#[hyper::model]
-pub struct ProjectSummary {
-    pub id: Id<Project>,
-    pub title: String,
-    pub updated_at: Timestamp,
+// 1) QML/Slint + Dioxus 감각의 선언적 UI 문법 (lace와 hera가 동일한 문법 공유)
+ui! {
+    Card {
+        padding: 12px,
+        title: project.title,
+        Button {
+            text: if liked() { "좋아요 취소" } else { "좋아요" },
+            clicked => { liked.toggle(); }
+        }
+    }
 }
 
-#[hyper::api]
-pub trait ProjectService {
-    #[get("/v1/projects/{id}")]
-    async fn get_project(&self, id: Id<Project>) -> Result<ProjectSummary, ApiError>;
-}
+// 2) GPUI처럼 DSL 없이도 가독성이 좋은 순수 Rust 빌더 체이닝 (1:1 대응)
+Card::new()
+    .padding(px(12.0))
+    .title(project.title.clone())
+    .child(
+        Button::new(if liked() { "좋아요 취소" } else { "좋아요" })
+            .on_click(move |_| liked.toggle()),
+    )
 ```
 
-> 위 코드 블록은 DX 방향을 설명하기 위한 스케치이며, 구체 매크로 이름과 어트리뷰트 문법은 [`04-open-questions.md`](04-open-questions.md) #1에서 확정합니다.
+> 위 코드 블록은 선언적 DSL과 GPUI식 순수 Rust 빌더의 1:1 대응 방향을 설명하기 위한 스케치이며, 세부 토큰·키워드는 [`04-open-questions.md`](04-open-questions.md) #1에서 확정합니다.
 
 ## 2. 올인원 개발 환경 CLI (`hyper` — Bun 포지션)
 
