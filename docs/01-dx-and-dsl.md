@@ -1,6 +1,6 @@
 # 01. DX 및 DSL 설계 (hyper)
 
-> 상태: QML/Slint·Dioxus `rsx!`·GPUI 빌더 병행 원칙, `lace`·`hera` 공통 UI 문법, `init`/`preview`/`lint`/`test` 범위는 **확정**, 세부 키워드는 **제안/미정** · 기준일: 2026-11-17
+> 상태: 개발 생산성 중심 표현 개방성(QML/Slint·Dioxus `rsx!`·GPUI 빌더 레퍼런스), `lace`·`hera` 공통 UI 문법, `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드는 **제안/미정** · 기준일: 2026-11-18
 
 `hyper`의 목표는 개발자가 백엔드(`ring`), 웹(`lace`), 네이티브(`hera`) 어느 계층을 작성하든 **하나의 일관된 표현 감각과 하나의 CLI 도구**로 즉시 결과물을 확인하게 하는 것입니다. 범용 원칙은 `hyperish/docs`의 `01-dx-principles.md`를 따릅니다.
 
@@ -48,9 +48,13 @@ Node.js에서 `npm` + `vite` + `vitest` + `eslint`를 따로 설치·설정하�
 | 명령 | 역할 (Bun 대응) | 동작 방향 (제안) |
 |---|---|---|
 | `hyper init` | 프로젝트·크레이트 초기화 (`bun init` / `create`) | 풀스택(`ring`+`lace`/`hera`), 웹 단독(`lace`), 네이티브 단독(`hera`), 백엔드 단독(`ring`) 스타터 템플릿을 즉시 생성하고 수 분 내 실행 가능한 기본 예제를 포함 |
-| `hyper preview` | 실시간 미리보기·핫리로드 (`bun --hot` / dev server) | 코드·DSL 변경 시 웹(`lace`) 뷰포트, 네이티브(`hera`) 창, 백엔드(`ring`) 로컬 서버를 즉시 리로드하고 상태(state)를 보존 |
+| `hyper preview` | 실시간 미리보기·핫리로드 (`bun --hot` / dev server) | 코드·DSL 변경 시 웹(`lace`) 뷰포트, 네이티브(`hera`) 창, 백엔드(`ring`) 로컬 서버를 즉시 리로드하고 상태(state)를 보존 (변경된 계약에 대한 증분 `codegen` 자동 수행) |
 | `hyper lint` | 정적 검사·포맷·규약 검증 | `rustfmt`/`clippy`뿐 아니라 하이퍼리쉬 DSL 규약, 코어 경계 위반(코어에 어댑터 타입 유입 등), API 스키마 호환성을 함께 진단 |
 | `hyper test` | 통합 고속 테스트 러너 (`bun test`) | 단위 테스트, proc macro 전개·컴파일 타임 오류 스냅샷 테스트, 어댑터 계약 테스트를 단일 러너로 일괄 고속 실행 |
+| `hyper build` | 타깃별 프로덕션 빌드·패키징 (`bun build`) | `ring`·`lace`·`hera` 타깃별 프로덕션 컴파일·번들링·패키징을 수행하며, 스키마·바인딩·어댑터 코드 생성(`codegen`)을 빌드 파이프라인의 선행 단계로 기본 포함 |
+| `hyper codegen` | 단독 코드 생성 (보조 명령) | `hyper build`나 `hyper preview` 내부에서 자동 실행되는 `codegen` 단계만 단독으로 실행할 때 사용하는 보조 명령(IDE 자동완성 갱신, 외부 스키마·바인딩 사전 생성 및 점검용) |
+
+> 이 표가 `hyper` CLI 대표 명령의 기준 목록입니다. `codegen`은 별개의 독립 워크플로가 아니라 `build`·`preview` 파이프라인에 기본 포함되는 선행 단계이며, 전체 컴파일 없이 생성 코드만 갱신·검증할 때 `hyper codegen`으로 단독 호출합니다.
 
 ## 3. 진단 메시지 원칙
 
