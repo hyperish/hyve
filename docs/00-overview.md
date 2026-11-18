@@ -25,7 +25,7 @@ JS 생태계에서 Node.js + npm + webpack + jest + 수많은 서드파티 패�
 | 축 | 레퍼런스 / 전략 | 채용 이유 |
 |---|---|---|
 | **툴체인 & 내장 코어 포지션** | **Bun** (기존 Rust/Cargo = Node.js 대비) | 파편화된 빌드·테스트·패키지 도구와 기본 런타임 유틸리티를 단일 고속 툴체인과 내장 코어로 수직 통합 |
-| **DX & UI/매크로 문법** | **QML/Slint, Dioxus (`rsx!`), GPUI (순수 Rust 빌더)** | QML/Slint의 깔끔한 계층·프로퍼티 바인딩과 Dioxus `rsx!`의 표현력을 결합하되, GPUI처럼 순수 Rust 빌더만으로도 가독성이 충분하면 DSL 없이도 작성 가능하게 함. `lace`의 웹·네이티브 타깃이 **같은 UI 문법**을 공유하도록 코어 파서를 제공 |
+| **DX & 표현 문법** | **UI 마크업: proc macro DSL (QML/Slint · Dioxus `rsx!`)<br>컴포넌트 조립: 순수 Rust 체이닝** | UI 뷰 트리는 가독성과 정적 템플릿 분리·핫리로드를 위해 proc macro DSL로 고정하고, 앱·라우트·가드 조립은 순수 Rust 메서드 체이닝으로 역할을 명확히 분리 |
 | **코어 구현 (`unit optimization`)** | **고성능 검증 크레이트 포크 + 단계적 `unit optimization`** | 1단계로 범용 추상화·미사용 피처를 걷어내고 `hyper` 코어 타입에 직결(수직화)하며, 추후 병목 구간에 한해 2단계(Arena/SoA·SIMD 등) 심화 개조 여지를 확보 |
 | **계층 수직화** | **`hyper` 코어를 `ref`로 삼고 그 위에 호환 어댑터 배치** | `ring`, `lace`가 제각각 모델을 정의하지 않고 `hyper` 코어를 단일 원천으로 공유하고, 기존 Rust 생태계(`serde`/Cargo 등)와는 어댑터로 호환 |
 
