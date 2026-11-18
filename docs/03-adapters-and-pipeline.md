@@ -10,20 +10,20 @@
                  ┌──────────────────────────────────────────┐
                  │                 hyper                    │
                  │  (DSL 매크로 · 상태 · 직렬화 · 파서 · API)  │
-                 └──────┬─────────────┬──────────────┬──────┘
-                        │ ref         │ ref          │ ref
-                        ▼             ▼              ▼
-                     [ ring ]      [ lace ]       [ glint ]
-                     (백엔드)     (DOM / Web)   (GPU Native UI)
-                        │             │              │
-                        ▼             ▼              ▼
-                  [호환 어댑터]   [호환 어댑터]   [호환 어댑터]
-                  HTTP/WS/DB     DOM/SSR/Ionic  GPU/CPU/Lace-WV
+                 └─────────────┬──────────────────┬─────────┘
+                               │ ref              │ ref
+                               ▼                  ▼
+                            [ ring ]           [ lace ]
+                            (백엔드)     (Web DOM + Native GPU/CPU UI)
+                               │                  │
+                               ▼                  ▼
+                         [호환 어댑터]        [타깃 & 호환 어댑터]
+                         HTTP/WS/DB         Web(DOM/SSR/Ionic) · Native(GPU/CPU/OS)
 ```
 
 1. **단일 모델·단일 계약**: 데이터 모델, 검증 규칙, 상태 시그널, API 인터페이스는 `hyper` 코어 크레이트에서 한 번만 정의합니다.
-2. **제로 보일러플레이트 연결**: `ring`은 `hyper-api`와 `hyper-serde`를 참조해 핸들러와 전송 파이프를 구성하고, `lace`와 `glint`는 동일한 `hyper-api`와 `hyper-state`를 참조해 UI 상태와 원격 호출을 직결합니다.
-3. **개발 툴 파이프라인 (`hyper preview` / `lint` / `test`)**: CLI가 워크스페이스 그래프를 분석해 코어 변경이 백엔드·웹·네이티브 타깃에 미치는 영향을 한 번에 빌드·검증합니다.
+2. **제로 보일러플레이트 연결**: `ring`은 `hyper-api`와 `hyper-serde`를 참조해 핸들러와 전송 파이프를 구성하고, `lace`(웹·네이티브)는 동일한 `hyper-api`와 `hyper-state`를 참조해 UI 상태와 원격 호출을 직결합니다.
+3. **개발 툴 파이프라인 (`hyper preview` / `lint` / `test` / `build`)**: CLI가 워크스페이스 그래프를 분석해 코어 변경이 백엔드(`ring`)와 웹·네이티브 UI(`lace`)에 미치는 영향을 한 번에 빌드·검증합니다.
 
 ## 2. 어댑터 경계와 변환 규칙
 
