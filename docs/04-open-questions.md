@@ -14,12 +14,6 @@
 
 ## 결정됨
 
-- **결정**: `hyper`는 **기존 Rust/Cargo 생태계가 Node.js라면 Bun에 해당하는 포지션**으로, 프레임워크 패밀리 전체의 올인원 개발 환경(`init`, `preview`, `lint`, `test`, `build`), 기본 내장 범용 코어 모듈(상태성, 직렬화, 파서), API 규격 인터페이스를 통합 관리함
-  - **날짜**: 2026-11-17
-  - **영향**: `hyper` 전체 문서(`00`~`03`)
-- **결정**: UI/선언적 문법은 **QML 기반 Slint 스타일**과 **Dioxus `rsx!`**를 레퍼런스로 삼아 `lace`의 웹·네이티브 타깃이 동일한 문법을 공유하되, **GPUI처럼 DSL 없이 순수 Rust 빌더만으로도 가독성이 충분하면 DSL을 쓰지 않아도 되도록** 1:1 대응 설계
-  - **날짜**: 2026-11-17 (2026-11-18 `lace` 통합 반영)
-  - **영향**: `00-overview.md`, `01-dx-and-dsl.md`, `02-architecture.md`
-- **결정**: `hyper-state`는 단일 스레드 고속 로컬 시그널(`!Send`)과 멀티스레드 공유 시그널(`Send + Sync`)을 이원화하되 동일한 반응형 API로 제공하며, `unit optimization`은 1단계(추상화·미사용 피처 제거 및 `hyper` 코어 직결)를 기본으로 하고 추후 병목 구간에 2단계(메모리 레이아웃·SIMD 등) 개조 여지를 둠
-  - **날짜**: 2026-11-17
-  - **영향**: `00-overview.md`, `02-architecture.md`
+- **Rust/Cargo 대비 Bun 포지셔닝 확정** (2026-11-17): 올인원 CLI(`init`, `preview`, `lint`, `test`, `build`) + 기본 내장 범용 코어 모듈(`00-overview.md`)
+- **`hyper-state` 반응성 코어의 `signal(0)` 표기 및 이원화 스레드 모델(`LocalSignal` / `SyncSignal`) 확정** (2026-11-17 ~ 2026-11-18): `02-architecture.md` §2.2
+- **웹 전용 OpenAPI 제외 및 범용 스키마·검증(`hyper-validate`)·인터페이스(`hyper-api`) 경계 확정** (2026-11-18): `00-overview.md`, `02-architecture.md`
