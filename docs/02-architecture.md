@@ -12,7 +12,7 @@ hyper/
     hyper-cli/          # `hyper` 바이너리 (대표 명령: init, preview, lint, test, build + 보조 codegen — 01-dx-and-dsl.md §2 참조)
   crates/
     hyper/              # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
-    hyper-core/         # 수명, 소유권 핸들, 오류, 취소 토큰, 기본 타입(Ulid, Timestamp, 해싱), 컴포넌트 Ctx<T> 계약
+    hyper-core/         # 수명, 소유권, 오류, 취소 토큰, 기본 타입(Ulid, Timestamp), Lock-Free/Shm 공용 Ring Buffer(`SharedRingBuf`), Ctx<T>
     hyper-macros/       # proc macro 기반 선언적 DSL (`#[model]`, `ui!`, `asset!` 등, proc-macro = true)
     hyper-state/        # 범용 반응형 상태(`signal(init)`, memo, effect, store) 및 스냅샷 모델
     hyper-serde/        # 고성능 내부 직렬화·역직렬화 코어 + 포맷 어댑터 트레이트
@@ -29,8 +29,9 @@ hyper/
 
 ## 2. 코어 모듈별 책임 (제안)
 
-### 2.1 `hyper-core` (기반 계약 및 컴포넌트 컨텍스트)
-- 식별자(ID), 시각, 상관관계 ID(`RequestId`/`TraceId`), 구조화된 오류 분류(`Domain` / `Infra` / `Internal`), 구조적 취소(`CancellationToken`)와 커밋 지점 추상화, 그리고 컴포넌트 트리가 상태를 주입·추출하는 `Ctx<T>` 계약을 제공합니다(`hyperish/docs` `02-core-contracts.md` §1~§4 구현체).
+### 2.1 `hyper-core` (기반 계약 · 공용 Ring Buffer · 컴포넌트 컨텍스트)
+- 식별자(ID), 시각, 상관관계 ID(`RequestId`/`TraceId`), 구조화된 오류 분류(`Domain` / `Infra` / `Internal`), 구조적 취소(`CancellationToken`), 컴포넌트 컨텍스트(`Ctx<T>`) 계약을 제공합니다.
+- 인프로세스 스레드 간 및 로컬 멀티프로세스 공유 메모리(`shm`/`mmap`) 간에 대용량·120fps 실시간 스트림을 락·복사 없이 주고받는 **Lock-Free SPSC/MPMC 공용 링 버퍼(`SharedRingBuf<T>`)** 프리미티브를 제공합니다.
 
 ### 2.2 `hyper-state` (상태성 / Reactivity — `signal()` & 이원화 스레드 모델 확정)
 - React 훅 모방(`use_signal(|| 0)`) 대신 직관적인 **`signal(0)`** 생성자를 기본으로 제공하며, UI(`lace`)와 백엔드(`ring`), 그래픽 엔진·일반 애플리케이션이 공통으로 사용할 수 있는 **플랫폼 중립 반응형 그래프**를 제공합니다.
