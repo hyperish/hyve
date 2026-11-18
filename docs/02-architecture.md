@@ -16,34 +16,34 @@ hyper/
     hyper-macros/       # proc macro 기반 선언적 DSL (proc-macro = true)
     hyper-state/        # 범용 반응형 상태(`signal(init)`, memo, effect, store) 및 스냅샷 모델
     hyper-serde/        # 고성능 내부 직렬화·역직렬화 코어 + 포맷 어댑터 트레이트
-    hyper-validate/     # 프론트(lace)·백엔드(ring) 공용 데이터 검증(`#[validate]`, `Valid<T>`) 및 제약 메타데이터
+    hyper-validate/     # 범용 데이터 검증(`#[validate]`, `Valid<T>`) 및 타입/제약 스키마 메타데이터
     hyper-parser/       # DSL·스키마·포맷용 고성능 파서 콤비네이터/토크나이저 코어
-    hyper-api/          # API 규격 계약, OpenAPI/Swagger 스키마 원천 메타데이터, 타입 안전 Request/TestClient 트레이트
+    hyper-api/          # 범용 규격 인터페이스(Contract) 및 스키마 정의 (플러그인·IPC·RPC·테스트 클라이언트 추상 계약)
     hyper-diagnostics/  # 컴파일 타임·런타임 구조화 진단 및 에러 리포팅
 ```
 
-- 외부 개발자와 상위 레이어(`ring`, `lace`)는 기본적으로 진입 크레이트(`hyper`) 또는 명시된 코어 크레이트(`hyper-core`, `hyper-state`, `hyper-serde`, `hyper-validate`, `hyper-api`)를 참조(`ref`)합니다.
+- 외부 개발자와 상위 레이어(`ring`, `lace` 및 개별 제품)는 기본적으로 진입 크레이트(`hyper`) 또는 명시된 코어 크레이트(`hyper-core`, `hyper-state`, `hyper-serde`, `hyper-validate`, `hyper-api`)를 참조(`ref`)합니다.
 - 내부 포크 크레이트는 `crates/` 하위(또는 워크스페이스 내 포크 전용 경로)에서 관리하며, 외부에는 `hyper-*`의 안정 인터페이스만 노출합니다.
 
 ## 2. 코어 모듈별 책임 (제안)
 
 ### 2.1 `hyper-core` (기반 계약 및 컴포넌트 컨텍스트)
-- 식별자(ID), 시각, 상관관계 ID(`RequestId`/`TraceId`), 구조화된 오류 분류(`Domain` / `Infra` / `Internal`), 구조적 취소(`CancellationToken`)와 커밋 지점 추상화, 그리고 `ring`·`lace` 컴포넌트 트리가 상태를 주입·추출하는 `Ctx<T>` 계약을 제공합니다(`hyperish/docs` `02-core-contracts.md` §1~§4 구현체).
+- 식별자(ID), 시각, 상관관계 ID(`RequestId`/`TraceId`), 구조화된 오류 분류(`Domain` / `Infra` / `Internal`), 구조적 취소(`CancellationToken`)와 커밋 지점 추상화, 그리고 컴포넌트 트리가 상태를 주입·추출하는 `Ctx<T>` 계약을 제공합니다(`hyperish/docs` `02-core-contracts.md` §1~§4 구현체).
 
 ### 2.2 `hyper-state` (상태성 / Reactivity — `signal()` & 이원화 스레드 모델 확정)
-- React 훅 모방(`use_signal(|| 0)`) 대신 직관적인 **`signal(0)`** 생성자를 기본으로 제공하며, `lace`(웹 반응형 DOM 및 GPU/CPU 네이티브 UI 상태)와 `ring` 도메인 상태가 공통으로 사용할 수 있는 **플랫폼 중립 반응형 그래프**를 제공합니다.
+- React 훅 모방(`use_signal(|| 0)`) 대신 직관적인 **`signal(0)`** 생성자를 기본으로 제공하며, UI(`lace`)와 백엔드(`ring`), 그래픽 엔진·일반 애플리케이션이 공통으로 사용할 수 있는 **플랫폼 중립 반응형 그래프**를 제공합니다.
 - **이원화(Dual-mode) 스레드 모델**:
-  - 단일 스레드 UI 경로(`lace` WASM 웹 타깃 및 네이티브 메인 UI 스레드 로컬 상태)에서는 원자적 락 오버헤드가 없는 고속 로컬 시그널(`LocalSignal`)을 기본으로 씁니다.
-  - 멀티스레드·백그라운드 공유 경로(`ring` 서버 상태, `lace` 네이티브 워커 ↔ UI 공유 상태)에서는 `Send + Sync` 원자적 시그널(`SyncSignal`)을 제공하되, 두 모드가 동일한 반응형 읽기/바인딩 문법을 공유합니다.
+  - 단일 스레드 경로(WASM 웹 타깃 및 네이티브 메인 스레드 로컬 상태)에서는 원자적 락 오버헤드가 없는 고속 로컬 시그널(`LocalSignal`)을 기본으로 씁니다.
+  - 멀티스레드·백그라운드 공유 경로(서버 상태, 멀티스레드 워커 공유 상태)에서는 `Send + Sync` 원자적 시그널(`SyncSignal`)을 제공하되, 두 모드가 동일한 반응형 읽기/바인딩 문법을 공유합니다.
 - 읽기 참조 대여와 명시적 변경 요청 규칙을 타입 수준에서 강제합니다.
 
-### 2.3 `hyper-serde` · `hyper-validate` · `hyper-parser` (직렬화·검증·파서·공통 UI AST)
+### 2.3 `hyper-serde` · `hyper-validate` · `hyper-parser` (직렬화·검증·파서·범용 스키마)
 - 내부 규약 모델은 표준 호환보다 **성능과 수직 통합 생산성이 극대화되는 바이너리/제로카피 지향 포맷**을 기본으로 다루고, JSON 등 외부 표준 포맷은 어댑터로 분리합니다.
-- `hyper-validate`는 모델 필드의 제약 조건(`len`, `range`, `email`, 커스텀 검증 함수 등)을 정의해 프론트엔드(`lace` 폼 입력 검증)와 백엔드(`ring` 핸들러 진입 시 `Valid<T>` 추출)가 검증 로직을 100% 공유하게 하고, 동시에 이 제약 조건을 `hyper-api`의 OpenAPI 스키마 메타데이터로 내보냅니다.
-- `hyper-parser`는 **QML/Slint + Dioxus `rsx!` 스타일의 공통 UI 문법 AST**와 런타임 스키마 파싱을 모두 담당하여, `lace`의 웹 타깃과 네이티브 타깃이 동일한 UI 문법 파서를 공유하게 합니다.
+- `hyper-validate`는 웹/서버에 종속되지 않는 **범용 구조체·데이터 검증 및 스키마 리플렉션**(`len`, `range`, 패턴, 커스텀 불변조건 등)을 제공합니다. 설정 파일, 에셋 데이터, UI 입력, 서버 요청 어디서든 동일하게 재사용됩니다.
+- `hyper-parser`는 선언적 DSL(QML/Slint + Dioxus `rsx!` 스타일)과 런타임 스키마/데이터 포맷 파싱을 모두 담당하는 저할당 파서 기반을 제공합니다.
 
-### 2.4 `hyper-api` (API 규격 · OpenAPI 스키마 원천 · Request/TestClient 인터페이스)
-- 하나의 서비스·리소스·컴포넌트 계약으로부터 ① 백엔드 라우터 바인딩(`ring`), ② 웹·네이티브 클라이언트 바인딩(`lace`), ③ **Swagger/OpenAPI 스키마 트리(`ring`에서 `/docs`로 서빙)**, ④ **`hyper test`에서 네트워크 포트 없이 바로 호출 가능한 인메모리 `TestClient` 인터페이스**를 동시에 도출합니다.
+### 2.4 `hyper-api` (범용 규격 인터페이스 통합)
+- 모듈·프로세스·네트워크 경계를 넘는 서비스·리소스·이벤트 계약(Contract)과 추상 클라이언트/호출 인터페이스를 정의합니다. `hyper` 자체는 HTTP나 OpenAPI 같은 특정 프로토콜 규격을 포함하지 않으며, 백엔드(`ring`)가 이 범용 스키마·인터페이스를 읽어들여 라우터 바인딩이나 OpenAPI 문서로 변환합니다.
 
 ## 3. 내부 포크 + Unit Optimization 운영 (확정)
 
