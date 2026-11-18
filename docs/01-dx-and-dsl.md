@@ -1,45 +1,44 @@
 # 01. DX 및 DSL 설계 (hyper)
 
-> 상태: 개발 생산성 중심 표현 개방성(QML/Slint·Dioxus `rsx!`·GPUI 빌더 레퍼런스), `lace` 웹·네이티브 단일 UI 문법, `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드는 **제안/미정** · 기준일: 2026-11-18
+> 상태: 영역별 표현 분리(UI 마크업 = proc macro DSL 고정, 컴포넌트 조립 = Rust 체이닝), `lace` 웹·네이티브 단일 UI 문법, `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드는 **제안/미정** · 기준일: 2026-11-18
 
 `hyper`의 목표는 개발자가 백엔드(`ring`)나 크로스플랫폼 UI(`lace`, 웹·네이티브) 어느 계층을 작성하든 **하나의 일관된 표현 감각과 하나의 CLI 도구**로 즉시 결과물을 확인하게 하는 것입니다. 범용 원칙은 `hyperish/docs`의 `01-dx-principles.md`를 따릅니다.
 
-## 1. 생산성 중심 표현 원칙: DSL은 수단일 뿐, 더 효율적이면 어떤 방법이든 무관 (확정)
+## 1. 영역별 표현 방식의 명확한 고정: 조립은 체이닝, UI 마크업은 Proc Macro DSL (확정)
 
-- **DSL 채택의 유일한 기준은 '개발 생산성'**: QML 기반 Slint 스타일이나 Dioxus `rsx!` 같은 매크로 DSL을 채택하는 이유는 오직 개발 생산성과 가독성을 높이기 위해서입니다. **이 목적이 충족되거나 더 효율적인 방법(GPUI식 순수 Rust 빌더·체이닝, 코드젠, 트레이트 조합 등)이 있다면 그 어떤 방법을 사용해도 무관**합니다.
+- **DSL 채택 기준은 '개발 생산성'이며 영역별로 방식을 하나로 고정**:
+  - **UI 뷰(화면 트리) 마크업 (`lace`)**: 중첩 트리 가독성, 컴파일 타임 정적 템플릿 분리, 즉시 핫리로드를 위해 **proc macro DSL(QML/Slint + Dioxus `rsx!` 스타일) 하나로 고정**합니다.
+  - **컴포넌트·라우트·가드 조립 (`ring`, `lace`) 및 저수준 드로잉**: 순수 **Rust 메서드 체이닝(`component().provide().wrap()...`)과 일반 함수**로 고정합니다.
 - **`lace` 내 웹(DOM)과 네이티브(GPU/CPU)의 단일 공통 UI 문법**:
-  - `hyper-parser`와 `hyper-macros`(또는 공통 빌더 코어)가 **공통 UI 문법**을 제공하여, `lace`의 웹 타깃과 네이티브 타깃은 완전히 같은 UI 문법 구조를 씁니다.
+  - `hyper-parser`와 `hyper-macros`가 **공통 UI 문법 파서**를 제공하여, `lace`의 웹 타깃과 네이티브 타깃은 완전히 같은 proc macro UI 문법을 씁니다.
   - 기본 컴포넌트·레이아웃·바인딩 문법은 동일하고, 그 안에 웹(DOM) 전용 기능/어트리뷰트가 들어가느냐 네이티브(OS/GPU) 전용 기능이 들어가느냐에 따라 타깃 확장이 나뉩니다.
 - **컴파일 타임 검증**: 스키마 불일치, 누락된 필수 프로퍼티, 잘못된 상태 바인딩, 타깃에 맞지 않는 기능 사용은 런타임이 아니라 **컴파일러 진단 메시지**로 잡습니다.
 
-### 개념 스케치 (제안 — 구체 문법은 미정)
+### 개념 스케치 (제안 — 구체 키워드는 미정)
 
 ```rust
 use hyper::prelude::*;
 
-// 1) QML/Slint + Dioxus 감각의 선언적 UI 문법 (lace 웹·네이티브 타깃 공통)
+// 1) 모델·검증·스키마 선언: 어트리뷰트 매크로
+#[model]
+pub struct ProjectSummary {
+    #[validate(len = 1..=80)]
+    pub title: String,
+}
+
+// 2) UI 뷰 마크업 (`lace`): QML/Slint + Dioxus 감각의 proc macro DSL로 고정
 ui! {
-    Card {
-        padding: 12px,
-        title: project.title,
+    Card { padding: 12px, gap: 8px,
+        Label { "{project.title}" }
         Button {
-            text: if liked() { "좋아요 취소" } else { "좋아요" },
-            clicked => { liked.toggle(); }
+            onclick: move |_| liked.toggle(),
+            if liked() { "좋아요 취소" } else { "좋아요" }
         }
     }
 }
-
-// 2) GPUI처럼 DSL 없이도 가독성이 좋은 순수 Rust 빌더 체이닝 (1:1 대응)
-Card::new()
-    .padding(px(12.0))
-    .title(project.title.clone())
-    .child(
-        Button::new(if liked() { "좋아요 취소" } else { "좋아요" })
-            .on_click(move |_| liked.toggle()),
-    )
 ```
 
-> 위 코드 블록은 선언적 DSL과 GPUI식 순수 Rust 빌더의 1:1 대응 방향을 설명하기 위한 스케치이며, 세부 토큰·키워드는 [`04-open-questions.md`](04-open-questions.md) #1에서 확정합니다.
+> 세부 토큰·키워드 규격은 [`04-open-questions.md`](04-open-questions.md) #1에서 확정합니다.
 
 ## 2. 올인원 개발 환경 CLI (`hyper` — Bun 포지션)
 
