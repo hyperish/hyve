@@ -1,44 +1,46 @@
-# 01. DX 및 DSL 설계 (hyper)
+# 01. DX 및 코어 매크로·CLI 설계 (hyper)
 
-> 상태: 영역별 표현 분리(UI 마크업 = proc macro DSL 고정, 컴포넌트 조립 = Rust 체이닝), `lace` 웹·네이티브 단일 UI 문법, `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드는 **제안/미정** · 기준일: 2026-11-18
+> 상태: 범용 모델·검증·설정·상태(`signal`)·에셋(`asset!`) DX 및 `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드는 **제안** · 기준일: 2026-11-18
 
-`hyper`의 목표는 개발자가 백엔드(`ring`)나 크로스플랫폼 UI(`lace`, 웹·네이티브) 어느 계층을 작성하든 **하나의 일관된 표현 감각과 하나의 CLI 도구**로 즉시 결과물을 확인하게 하는 것입니다. 범용 원칙은 `hyperish/docs`의 `01-dx-principles.md`를 따릅니다.
+`hyper`의 목표는 그래픽 엔진, CLI, 네이티브 툴, 백엔드(`ring`), UI(`lace`) 등 **어떤 종류의 Rust 프로젝트를 작성하든 파편화된 서드파티 크레이트 조립 없이 단일 코어와 단일 CLI 도구로 즉시 개발을 시작**하게 하는 것입니다. 범용 원칙은 `hyperish/docs`의 `01-dx-principles.md`를 따릅니다. (UI 뷰 마크업 DSL은 [`lace`](https://github.com/hyperish/lace)가 전담합니다.)
 
-## 1. 영역별 표현 방식의 명확한 고정: 조립은 체이닝, UI 마크업은 Proc Macro DSL (확정)
+## 1. 범용 코어 DX: 모델 · 검증 · 설정 · 상태 · 에셋
 
-- **DSL 채택 기준은 '개발 생산성'이며 영역별로 방식을 하나로 고정**:
-  - **UI 뷰(화면 트리) 마크업 (`lace`)**: 중첩 트리 가독성, 컴파일 타임 정적 템플릿 분리, 즉시 핫리로드를 위해 **proc macro DSL(QML/Slint + Dioxus `rsx!` 스타일) 하나로 고정**합니다.
-  - **컴포넌트·라우트·가드 조립 (`ring`, `lace`) 및 저수준 드로잉**: 순수 **Rust 메서드 체이닝(`component().provide().wrap()...`)과 일반 함수**로 고정합니다.
-- **`lace` 내 웹(DOM)과 네이티브(GPU/CPU)의 단일 공통 UI 문법**:
-  - `hyper-parser`와 `hyper-macros`가 **공통 UI 문법 파서**를 제공하여, `lace`의 웹 타깃과 네이티브 타깃은 완전히 같은 proc macro UI 문법을 씁니다.
-  - 기본 컴포넌트·레이아웃·바인딩 문법은 동일하고, 그 안에 웹(DOM) 전용 기능/어트리뷰트가 들어가느냐 네이티브(OS/GPU) 전용 기능이 들어가느냐에 따라 타깃 확장이 나뉩니다.
-- **컴파일 타임 검증**: 스키마 불일치, 누락된 필수 프로퍼티, 잘못된 상태 바인딩, 타깃에 맞지 않는 기능 사용은 런타임이 아니라 **컴파일러 진단 메시지**로 잡습니다.
+- **단일 `#[model]` 선언으로 직렬화·검증·스키마 일원화**:
+  - `serde`, `validator`, 스키마 리플렉션 크레이트를 따로 붙이지 않고 `#[model]`과 `#[validate(...)]`만으로 고성능 직렬화(`hyper-serde`), 구조적 검증(`hyper-validate`), 범용 스키마 메타데이터를 한 번에 얻습니다.
+- **시작 시점 환경 설정 검증 (`hyper-config`)**:
+  - `.env`, `hyper.toml`, 환경 변수를 `#[model]` 구조체로 읽어 앱 시작 즉시 검증합니다.
+- **플랫폼 중립 반응형 상태 (`signal(init)`)**:
+  - UI뿐 아니라 범용 애플리케이션·시뮬레이션·엔진 상태 그래프에서도 직관적인 `signal(0)`을 동일하게 사용합니다.
+- **컴파일 타임 에셋 검증 (`asset!`)**:
+  - 파일·셰이더·설정 리소스 경로 오타를 컴파일 타임에 잡아냅니다.
 
-### 개념 스케치 (제안 — 구체 키워드는 미정)
+### 개념 스케치 (제안)
 
 ```rust
 use hyper::prelude::*;
 
-// 1) 모델·검증·스키마 선언: 어트리뷰트 매크로
+// 1) 모델 + 데이터 검증 + 환경 설정 스키마를 한 번에 선언
 #[model]
-pub struct ProjectSummary {
-    #[validate(len = 1..=80)]
-    pub title: String,
+pub struct EngineConfig {
+    #[validate(len = 1..=64)]
+    pub app_name: String,
+    #[validate(range = 30..=240)]
+    pub max_fps: u32,
 }
 
-// 2) UI 뷰 마크업 (`lace`): QML/Slint + Dioxus 감각의 proc macro DSL로 고정
-ui! {
-    Card { padding: 12px, gap: 8px,
-        Label { "{project.title}" }
-        Button {
-            onclick: move |_| liked.toggle(),
-            if liked() { "좋아요 취소" } else { "좋아요" }
-        }
-    }
+#[hyper::test]
+async fn config_and_reactive_state_work() {
+    // 2) 설정 로드 시점에 즉시 Validation 수행
+    let cfg = config::load::<EngineConfig>()?;
+    let fps = signal(cfg.max_fps);
+    let default_shader = asset!("/shaders/pbr.wgsl");
+
+    fps.set(120);
+    assert_eq!(fps.get(), 120);
+    assert!(default_shader.exists());
 }
 ```
-
-> 세부 토큰·키워드 규격은 [`04-open-questions.md`](04-open-questions.md) #1에서 확정합니다.
 
 ## 2. 올인원 개발 환경 CLI (`hyper` — Bun 포지션)
 
