@@ -12,17 +12,19 @@ hyper/
     hyper-cli/          # `hyper` 바이너리 (대표 명령: init, preview, lint, test, build + 보조 codegen — 01-dx-and-dsl.md §2 참조)
   crates/
     hyper/              # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
-    hyper-core/         # 수명, 소유권 핸들, 구조화 오류, 취소 토큰, 기본 타입(ULID 등), 컴포넌트 컨텍스트(Ctx) 계약
-    hyper-macros/       # proc macro 기반 선언적 DSL (proc-macro = true)
+    hyper-core/         # 수명, 소유권 핸들, 오류, 취소 토큰, 기본 타입(Ulid, Timestamp, 해싱), 컴포넌트 Ctx<T> 계약
+    hyper-macros/       # proc macro 기반 선언적 DSL (`#[model]`, `ui!`, `asset!` 등, proc-macro = true)
     hyper-state/        # 범용 반응형 상태(`signal(init)`, memo, effect, store) 및 스냅샷 모델
     hyper-serde/        # 고성능 내부 직렬화·역직렬화 코어 + 포맷 어댑터 트레이트
     hyper-validate/     # 범용 데이터 검증(`#[validate]`, `Valid<T>`) 및 타입/제약 스키마 메타데이터
+    hyper-config/       # `.env`, `hyper.toml`, 환경 변수, CLI 인자 통합 로더 (시작 시점 `hyper-validate` 자동 검증)
+    hyper-trace/        # 전 계층 통합 구조화 로깅·트레이싱·메트릭 (`TraceId`/`RequestId` 전파)
     hyper-parser/       # DSL·스키마·포맷용 고성능 파서 콤비네이터/토크나이저 코어
-    hyper-api/          # 범용 규격 인터페이스(Contract) 및 스키마 정의 (플러그인·IPC·RPC·테스트 클라이언트 추상 계약)
+    hyper-api/          # 범용 규격 인터페이스(Contract), 인라인 서버 함수 계약, 추상 테스트 클라이언트 트레이트
     hyper-diagnostics/  # 컴파일 타임·런타임 구조화 진단 및 에러 리포팅
 ```
 
-- 외부 개발자와 상위 레이어(`ring`, `lace` 및 개별 제품)는 기본적으로 진입 크레이트(`hyper`) 또는 명시된 코어 크레이트(`hyper-core`, `hyper-state`, `hyper-serde`, `hyper-validate`, `hyper-api`)를 참조(`ref`)합니다.
+- 외부 개발자와 상위 레이어(`ring`, `lace` 및 개별 제품)는 기본적으로 진입 크레이트(`hyper`) 또는 명시된 코어 크레이트(`hyper-core`, `hyper-state`, `hyper-serde`, `hyper-validate`, `hyper-config`, `hyper-trace`, `hyper-api`)를 참조(`ref`)합니다.
 - 내부 포크 크레이트는 `crates/` 하위(또는 워크스페이스 내 포크 전용 경로)에서 관리하며, 외부에는 `hyper-*`의 안정 인터페이스만 노출합니다.
 
 ## 2. 코어 모듈별 책임 (제안)
