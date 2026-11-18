@@ -9,7 +9,7 @@
 ```
 hyper/
   apps/
-    hyper-cli/          # `hyper` 바이너리 (init, preview, lint, test, codegen)
+    hyper-cli/          # `hyper` 바이너리 (대표 명령: init, preview, lint, test, build + 보조 codegen — 01-dx-and-dsl.md §2 참조)
   crates/
     hyper/              # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
     hyper-core/         # 수명, 소유권 핸들, 구조화 오류, 취소 토큰, 기본 타입(ULID 등)
