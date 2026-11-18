@@ -37,7 +37,7 @@ pub struct SceneConfig {
 | 번호 | 문서 | 내용 |
 |---|---|---|
 | 00 | [개요와 범위](docs/00-overview.md) | `hyper`의 정체성, 책임 경계, 레퍼런스, 코어 `ref` 수직화 원칙 |
-| 01 | [DX 및 DSL 설계](docs/01-dx-and-dsl.md) | QML/Slint·Dioxus·GPUI 빌더 기반 표현, `init`/`preview`/`lint`/`test`/`build` 통합 CLI DX |
-| 02 | [아키텍처와 크레이트 구조](docs/02-architecture.md) | `apps/`, `crates/` 모노레포 구성, 상태성·직렬화·파서·API 규격 코어, 내부 포크 운영 |
-| 03 | [파이프라인과 호환 어댑터](docs/03-adapters-and-pipeline.md) | `ring`·`lace`(웹/네이티브) 타깃 연결 파이프라인, API 규격 통합 인터페이스, 외부 호환 어댑터 |
+| 01 | [DX 및 DSL 설계](docs/01-dx-and-dsl.md) | 범용 모델·검증·설정·상태 DX 및 `init`/`preview`/`lint`/`test`/`build` 올인원 CLI |
+| 02 | [아키텍처와 크레이트 구조](docs/02-architecture.md) | `apps/`, `crates/` 모노레포 구성, 상태성·직렬화·파서·규격 인터페이스 코어 |
+| 03 | [파이프라인과 호환 어댑터](docs/03-adapters-and-pipeline.md) | `ring`·`lace` 타깃 연결 파이프라인, 규격 통합 인터페이스, 외부 호환 어댑터 |
 | 04 | [열린 결정](docs/04-open-questions.md) | `hyper` 레포의 미정 사항 목록과 결정 기록 |
