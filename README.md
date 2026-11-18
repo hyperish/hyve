@@ -30,17 +30,9 @@ pub struct SceneConfig {
 | **파편화된 빌드·개발 도구**: `cargo-watch`, 번들러, `nextest`, 린트 러너를 따로 설치·설정해야 함 | **올인원 단일 바이너리 CLI**: `hyper init` → `hyper preview` → `hyper test` → `hyper lint` → `hyper build` 하나로 범용 크레이트·엔진·백엔드(`ring`)·UI(`lace`)를 모두 구동 |
 | **구조를 강제하는 프레임워크**: 고정된 폴더 구조나 매크로 감옥에 갇혀 대형 프로젝트에서 아키텍처 고점이 막힘 | **아키텍처를 제한하지 않는 고점(High-Ceiling)**: 빠른 시작용 매크로와 저수준 순수 Rust 빌더·코어 프리미티브를 1:1로 열어 개발자가 직접 아키텍처를 설계 |
 
-상위 범용 명세는 [`hyperish/docs`](https://github.com/hyperish/docs)를 따릅니다.
+상위 범용 명세와 문서 상태 규칙(`확정` / `제안` / `미정`)은 [`hyperish/docs`](https://github.com/hyperish/docs)를 따릅니다.
 
-## 문서 상태 규칙
-
-| 상태 | 의미 |
-|---|---|
-| **확정** | 명시적으로 결정된 사실. 바꾸려면 리뷰 승인과 새 결정 기록이 필요하다 |
-| **제안** | 논의를 위한 설계안. 바꾸기 쉽게 적은 것이며, 확정이 아니다 |
-| **미정** | 아직 결정되지 않은 사항. [`docs/04-open-questions.md`](docs/04-open-questions.md)에서 추적한다 |
-
-## 문서 목록 (3개 코어 레포 공통 아키텍처)
+## 문서 목록
 
 | 번호 | 문서 | 내용 |
 |---|---|---|
