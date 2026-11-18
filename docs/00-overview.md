@@ -26,16 +26,16 @@ JS 생태계에서 Node.js + npm + webpack + jest + 수많은 서드파티 패�
 | 축 | 레퍼런스 / 전략 | 채용 이유 |
 |---|---|---|
 | **툴체인 & 내장 코어 포지션** | **Bun** (기존 Rust/Cargo = Node.js 대비) | 파편화된 빌드·테스트·패키지 도구와 기본 런타임 유틸리티를 단일 고속 툴체인과 내장 코어로 수직 통합 |
-| **DX & 표현 문법** | **UI 마크업: proc macro DSL (QML/Slint · Dioxus `rsx!`)<br>컴포넌트 조립: 순수 Rust 체이닝** | UI 뷰 트리는 가독성과 정적 템플릿 분리·핫리로드를 위해 proc macro DSL로 고정하고, 앱·라우트·가드 조립은 순수 Rust 메서드 체이닝으로 역할을 명확히 분리 |
+| **범용 매크로 & 컴포넌트 조립** | **선언적 어트리뷰트(`#[model]`, `#[validate]`) + 순수 Rust 체이닝** | 모델·스키마·검증·테스트·에셋처럼 반복 보일러플레이트가 큰 영역은 어트리뷰트/매크로로 압축하고, 컴포넌트·컨텍스트 조립은 순수 Rust 체이닝으로 구성 (UI 뷰 DSL은 `lace` 소관) |
 | **코어 구현 (`unit optimization`)** | **고성능 검증 크레이트 포크 + 단계적 `unit optimization`** | 1단계로 범용 추상화·미사용 피처를 걷어내고 `hyper` 코어 타입에 직결(수직화)하며, 추후 병목 구간에 한해 2단계(Arena/SoA·SIMD 등) 심화 개조 여지를 확보 |
 | **계층 수직화** | **`hyper` 코어를 `ref`로 삼고 그 위에 호환 어댑터 배치** | `ring`, `lace`가 제각각 모델을 정의하지 않고 `hyper` 코어를 단일 원천으로 공유하고, 기존 Rust 생태계(`serde`/Cargo 등)와는 어댑터로 호환 |
 
 ## 3. 책임 경계: 소유하는 것과 소유하지 않는 것
 
 - **소유함**:
-  - 타깃 중립 코어 모델(`hyper-core`), 상태성(`hyper-state`), 직렬화(`hyper-serde`), 파서(`hyper-parser`), API 규격 계약(`hyper-api`), proc macro DSL(`hyper-macros`), 통합 CLI(`hyper-cli`).
+  - 타깃 중립 코어 모델(`hyper-core`), 상태성(`hyper-state`), 직렬화(`hyper-serde`), 검증(`hyper-validate`), 설정(`hyper-config`), 추적(`hyper-trace`), 파서(`hyper-parser`), 규격 인터페이스(`hyper-api`), 범용 매크로(`hyper-macros`), 통합 CLI(`hyper-cli`).
 - **소유하지 않음**:
-  - 백엔드 전용 인프라·DB·MSA·WS/WT 런타임(`ring` 소관)
-  - 브라우저 DOM·SSR/Hydration 및 데스크톱/모바일 GPU·CPU 네이티브 UI 렌더러(`lace` 소관)
+  - 백엔드 전용 인프라·DB·MSA·WS/WT·OpenAPI 런타임(`ring` 소관)
+  - UI 선언적 뷰 DSL(`ui!`) 및 브라우저 DOM·SSR·네이티브 GPU/CPU UI 렌더러(`lace` 소관)
 - **의존 방향**:
   - `ring`, `lace` → `hyper` (단방향). `hyper` 코어 크레이트는 특정 타깃(DOM, OS 윈도우, 특정 DB 드라이버)에 직접 의존하지 않으며, CLI(`apps/hyper-cli`)만 워크플로 오케스트레이션을 위해 각 타깃 러너를 호출합니다.
