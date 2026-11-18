@@ -13,7 +13,7 @@ hyper/
   crates/
     hyper/              # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
     hyper-core/         # 수명, 소유권, 오류, 취소 토큰, 기본 타입(Ulid, Timestamp), Lock-Free/Shm 공용 Ring Buffer(`SharedRingBuf`), Ctx<T>
-    hyper-macros/       # proc macro 기반 선언적 DSL (`#[model]`, `ui!`, `asset!` 등, proc-macro = true)
+    hyper-macros/       # 범용 코어 proc macro (`#[model]`, `#[validate]`, `#[hyper::test]`, `asset!`, proc-macro = true)
     hyper-state/        # 범용 반응형 상태(`signal(init)`, memo, effect, store) 및 스냅샷 모델
     hyper-serde/        # 고성능 내부 직렬화·역직렬화 코어 + 포맷 어댑터 트레이트
     hyper-validate/     # 범용 데이터 검증(`#[validate]`, `Valid<T>`) 및 타입/제약 스키마 메타데이터
@@ -43,7 +43,7 @@ hyper/
 ### 2.3 `hyper-serde` · `hyper-validate` · `hyper-parser` (직렬화·검증·파서·범용 스키마)
 - 내부 규약 모델은 표준 호환보다 **성능과 수직 통합 생산성이 극대화되는 바이너리/제로카피 지향 포맷**을 기본으로 다루고, JSON 등 외부 표준 포맷은 어댑터로 분리합니다.
 - `hyper-validate`는 웹/서버에 종속되지 않는 **범용 구조체·데이터 검증 및 스키마 리플렉션**(`len`, `range`, 패턴, 커스텀 불변조건 등)을 제공합니다. 설정 파일, 에셋 데이터, UI 입력, 서버 요청 어디서든 동일하게 재사용됩니다.
-- `hyper-parser`는 선언적 DSL(QML/Slint + Dioxus `rsx!` 스타일)과 런타임 스키마/데이터 포맷 파싱을 모두 담당하는 저할당 파서 기반을 제공합니다.
+- `hyper-parser`는 매크로 구문 분석(`hyper-macros`, `lace-macros`, `ring-macros`)과 런타임 스키마·에셋·데이터 포맷 파싱을 모두 뒷받침하는 저할당 파서 콤비네이터/토크나이저 기반을 제공합니다.
 
 ### 2.4 `hyper-api` (범용 규격 인터페이스 통합)
 - 모듈·프로세스·네트워크 경계를 넘는 서비스·리소스·이벤트 계약(Contract)과 추상 클라이언트/호출 인터페이스를 정의합니다. `hyper` 자체는 HTTP나 OpenAPI 같은 특정 프로토콜 규격을 포함하지 않으며, 백엔드(`ring`)가 이 범용 스키마·인터페이스를 읽어들여 라우터 바인딩이나 OpenAPI 문서로 변환합니다.
