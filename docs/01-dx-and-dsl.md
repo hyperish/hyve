@@ -1,6 +1,6 @@
 # 01. DX 및 코어 매크로·CLI 설계 (hyper)
 
-> 상태: 범용 모델·검증·설정·상태(`signal`)·에셋(`asset!`) DX 및 `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드는 **제안** · 기준일: 2026-11-18
+> 상태: 범용 모델·검증·설정·상태(`signal`)·에셋(`asset!`) DX 및 `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드 및 Phase 컷은 **제안** · 기준일: 2026-11-19
 
 `hyper`의 목표는 그래픽 엔진, CLI, 네이티브 툴, 백엔드(`ring`), UI(`lace`) 등 **어떤 종류의 Rust 프로젝트를 작성하든 파편화된 서드파티 크레이트 조립 없이 단일 코어와 단일 CLI 도구로 즉시 개발을 시작**하게 하는 것입니다. 범용 원칙은 `hyperish/docs`의 `01-dx-principles.md`를 따릅니다. (UI 뷰 마크업 DSL은 [`lace`](https://github.com/hyperish/lace)가 전담합니다.)
 
@@ -30,7 +30,7 @@ pub struct EngineConfig {
 }
 
 #[hyper::test]
-async fn config_and_reactive_state_work() {
+async fn config_and_reactive_state_work() -> HyperResult<()> {
     // 2) 설정 로드 시점에 즉시 Validation 수행
     let cfg = config::load::<EngineConfig>()?;
     let fps = signal(cfg.max_fps);
@@ -39,6 +39,7 @@ async fn config_and_reactive_state_work() {
     fps.set(120);
     assert_eq!(fps.get(), 120);
     assert!(default_shader.exists());
+    Ok(())
 }
 ```
 
@@ -50,9 +51,9 @@ Node.js에서 `npm` + `vite` + `vitest` + `eslint`를 따로 설치·설정하�
 |---|---|---|
 | `hyper init` | 프로젝트·크레이트 초기화 (`bun init` / `create`) | 풀스택(`ring`+`lace`), UI 단독(`lace` 웹/네이티브), 백엔드 단독(`ring`) 스타터 템플릿을 즉시 생성하고 수 분 내 실행 가능한 기본 예제를 포함 |
 | `hyper preview` | 실시간 미리보기·핫리로드 (`bun --hot` / dev server) | 코드·DSL 변경 시 `lace` 웹 뷰포트·네이티브 창 및 `ring` 로컬 서버를 즉시 리로드하고 상태(state)를 보존 (변경된 계약에 대한 증분 `codegen` 자동 수행) |
-| `hyper lint` | 정적 검사·포맷·규약 검증 | `rustfmt`/`clippy`뿐 아니라 하이퍼리쉬 DSL 규약, 코어 경계 위반(코어에 어댑터 타입 유입 등), API 스키마 호환성을 함께 진단 |
+| `hyper lint` | 정적 검사·포맷·규약 검증 | `rustfmt`/`clippy`뿐 아니라 하이퍼리쉬 워크스페이스 규약(각 레포 린트 플러그인 포함), 코어 경계 위반(코어에 어댑터 타입 유입 등), API 스키마 호환성을 함께 진단 |
 | `hyper test` | 통합 고속 테스트 러너 (`bun test`) | 단위 테스트, proc macro 전개·컴파일 타임 오류 스냅샷 테스트, 어댑터 계약 테스트를 단일 러너로 일괄 고속 실행 |
-| `hyper build` | 타깃별 프로덕션 빌드·패키징 (`bun build`) | `ring` 서버 바이너리, `lace` 웹 번들(WASM/SSG), `lace` 네이티브 앱 번들(macOS `.app`/`.dmg`, Windows `.msi`/`.exe`, Linux `AppImage`/`.deb`, iOS `.ipa`, Android `.apk`/`.aab` + 코드 사이닝 및 데스크톱 델타 자동 업데이터) 패키징 수행 (`codegen` 및 `asset!` 번들링 선행 포함) |
+| `hyper build` | 타깃별 프로덕션 빌드·패키징 (`bun build`) | `ring` 서버 바이너리, `lace` 웹 번들(WASM/SSG), `lace` 네이티브 앱 번들 패키징(`codegen` 및 `asset!` 번들링 선행 포함; macOS `.app`/`.dmg`·Windows `.msi`/`.exe`·Linux `AppImage`/`.deb`·iOS `.ipa`·Android `.apk`/`.aab` 스토어 패키징·코드 사이닝·델타 자동 업데이터는 Phase 2~3 단계적 확장) |
 | `hyper codegen` | 단독 코드 생성 (보조 명령) | `hyper build`나 `hyper preview` 내부에서 자동 실행되는 `codegen` 단계만 단독으로 실행할 때 사용하는 보조 명령(IDE 자동완성 갱신, 외부 스키마·바인딩 사전 생성 및 점검용) |
 
 > 이 표가 `hyper` CLI 대표 명령의 기준 목록입니다. `codegen`은 별개의 독립 워크플로가 아니라 `build`·`preview` 파이프라인에 기본 포함되는 선행 단계이며, 전체 컴파일 없이 생성 코드만 갱신·검증할 때 `hyper codegen`으로 단독 호출합니다.
