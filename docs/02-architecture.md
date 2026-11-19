@@ -36,19 +36,29 @@ hyve/
   - **찢어짐(Tearing) 방지**: Producer가 고속으로 덮어쓰는 환경에서 불안정한 원시 슬라이스 대여를 허용하지 않고, 스냅샷 복사(seqlock/더블·트리플 버퍼) 또는 명시적 읽기 가드(`ReadGuard`) 모델을 강제합니다.
   - **수명·권한·샌드박스**: 프로세스 비정상 종료 시 잔여 `shm` 객체 정리 규칙, 타 사용자 접근 차단(`0600` 권한 격리), macOS App Sandbox / iOS App Group 컨테이너 경계를 준수합니다.
 
-### 2.2 `hyve-state` (상태성 / Reactivity — `signal()` & 이원화 스레드 모델 확정)
+### 2.2 `hyve-state` (상태성 / Reactivity — `signal()` & 단일 `Copy` 아레나 핸들 확정)
 - React 훅 모방(`use_signal(|| 0)`) 대신 직관적인 **`signal(0)`** 생성자를 기본으로 제공하며, UI(`serge`)와 백엔드(`orbic`), 그래픽 엔진·일반 애플리케이션이 공통으로 사용할 수 있는 **플랫폼 중립 반응형 그래프**를 제공합니다.
-- **이원화(Dual-mode) 스레드 모델**:
-  - 단일 스레드 경로(WASM 웹 타깃 및 네이티브 메인 스레드 로컬 상태)에서는 원자적 락 오버헤드가 없는 고속 로컬 시그널(`LocalSignal`)을 기본으로 씁니다.
-  - 멀티스레드·백그라운드 공유 경로(서버 상태, 멀티스레드 워커 공유 상태)에서는 `Send + Sync` 원자적 시그널(`SyncSignal`)을 제공하되, 두 모드가 동일한 반응형 읽기/바인딩 문법을 공유합니다(크로스플랫폼 컴포넌트 시그니처와 비동기 캡처 시 타입 마찰을 없애기 위한 단일 `Copy` 핸들 노출 여부는 [`04-open-questions.md`](04-open-questions.md)에서 확정).
+- **단일 `Copy` 핸들(`Signal<T>`) + 내부 스레드 모드 분리 (확정, 2026-11-19)**:
+  - 크로스플랫폼 컴포넌트 시그니처와 비동기 캡처 시 타입 마찰을 없애기 위해 기본 공개 타입은 단일 `Copy` 아레나 핸들 **`Signal<T>`**로 통일합니다(`!Send` 로컬 값만 `LocalSignal<T>` 옵트인).
+  - 내부 구현은 타깃별로 분기해 단일 스레드 경로(WASM 웹 및 네이티브 메인 스레드)에서는 원자적 락 없는 인덱스 아레나로, 멀티스레드 공유 경로에서는 `Send + Sync` 스토리지로 동작합니다.
 - 읽기 참조 대여와 명시적 변경 요청 규칙을 타입 수준에서 강제합니다.
 
 ### 2.3 `hyve-serde` · `hyve-validate` · `hyve-parser` (직렬화·검증·파서·범용 스키마)
-- 내부 규약 모델은 표준 호환보다 **성능과 수직 통합 생산성이 극대화되는 바이너리/제로카피 지향 포맷**을 기본으로 다루고, JSON 등 외부 표준 포맷은 어댑터로 분리합니다.
+- **단일 내부 바이너리 와이어 포맷 (`rkyv` 확정, 2026-11-19)**: 내부 직렬화는 `rkyv`(MIT, `bytecheck` 검증 기반 제로카피 역직렬화)를 단일 기준으로 사용해 Tier 2 Shm IPC·MSA·SSR 상태·고속 Dual-Rail을 한 코덱으로 통합하고, JSON(`serde_json`) 등 외부 표준 포맷은 어댑터로 분리합니다.
 - `hyve-validate`는 웹/서버에 종속되지 않는 **범용 구조체·데이터 검증 및 스키마 리플렉션**(`len`, `range`, 패턴, 커스텀 불변조건 등)을 제공합니다. 설정 파일, 에셋 데이터, UI 입력, 서버 요청 어디서든 동일하게 재사용됩니다.
 - `hyve-parser`는 매크로 구문 분석(`hyve-macros`, `serge-macros`, `orbic-macros`)과 런타임 스키마·에셋·데이터 포맷 파싱을 모두 뒷받침하는 저할당 파서 콤비네이터/토크나이저 기반을 제공합니다.
 
 ### 2.4 `hyve-api` (범용 규격 인터페이스 통합)
-- 모듈·프로세스·네트워크 경계를 넘는 서비스·리소스·이벤트 계약(Contract)과 추상 클라이언트/호출 인터페이스를 정의합니다. `hyve` 자체는 HTTP나 OpenAPI 같은 특정 프로토콜 규격을 포함하지 않으며, 백엔드(`orbic`)가 이 범용 스키마·인터페이스를 읽어들여 라우터 바인딩이나 OpenAPI 문서로 변환합니다.
+- 모듈·프로세스·네트워크 경계를 넘는 서비스·리소스·이벤트 계약(Contract)과 `#[server]` 인라인 서버 함수 계약을 정의합니다. `hyve` 자체는 HTTP나 OpenAPI 같은 특정 프로토콜 규격을 포함하지 않으며, 백엔드(`orbic`)가 이 범용 스키마·인터페이스를 읽어들여 컴포넌트 라우터 바인딩이나 OpenAPI 문서로 변환합니다.
 
-- 내부 포크 선정 및 단계적 `unit optimization` 절차는 `hyperish/docs`의 `05-development-rules.md` §7을 따릅니다.
+## 3. 확정 MIT 포크 스택 및 내부 코어 `unit optimization` 타깃 (2026-11-19 확정)
+
+전 크레이트는 **순수 `MIT` 라이선스**를 유지하기 위해 `MIT` 단독 또는 `MIT OR Apache-2.0`(MIT 선택) 크레이트만 포크합니다(`docs/05-development-rules.md` §7).
+
+| 모듈 | 베이스 크레이트 (확인 버전 · 라이선스) | 포크 후 내부 코어 개조(1·2단계 `unit optimization`) 방향 |
+|---|---|---|
+| `hyve-serde` | `rkyv` (`0.8.18`, `MIT`) · 외부 어댑터 `serde_json` (`1.0.154`, `MIT/Apache-2.0`) | `#[model]` 직결 및 `bytecheck` 검증 제로카피 경로 고정 (0할당 포인터 캐스팅 유지) |
+| `hyve-state` | `reactive_graph` (`0.3.0-rc1`, `MIT`) + `slotmap` (`1.1.1`, `Zlib`) | 범용 멀티-런타임·`AnySubscriber` 동적 디스패치 전면 제거 → 단일 스레드 무잠금 인덱스 아레나 + **SoA(값 배열/구독자 비트셋 분리)** 개조 |
+| `hyve-parser` | `winnow` (`1.0.5`, `MIT`) | 제로카피 슬라이스 파싱을 `hyve` 진단 스팬과 직결 |
+| `hyve-diagnostics` | `ariadne` (`0.6.0`, `MIT`) | 컴파일 타임/런타임 스팬·수정 가이드 출력 경량화 |
+| `hyve-core` | `ulid` (`3.0.0`, `MIT`), `bytemuck` (`1.25.2`, `MIT/Apache-2.0/Zlib`), `rtrb` (`0.4.1`) / `crossbeam-queue` (`0.3.14`, `MIT/Apache-2.0`) | `#[repr(C)]` POD 검증 + `SharedRingBuf<T>` 인프로세스/OS `shm` 안전 스냅샷·`ReadGuard` 직결 |
