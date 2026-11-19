@@ -1,0 +1,16 @@
+[package]
+name = "hyve"
+description = "All-in-one Rust core development framework and toolchain foundation for the Hyperish family"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme = "../../README.md"
+keywords = ["hyperish", "framework", "core", "toolchain", "reactive"]
+categories = ["development-tools"]
+
+[lints]
+workspace = true
