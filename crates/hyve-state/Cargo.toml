@@ -1,0 +1,13 @@
+[package]
+name = "hyve-state"
+description = "Target-neutral reactive state graph with Copy arena Signal handles for the Hyperish family"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

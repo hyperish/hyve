@@ -12,5 +12,12 @@ readme = "../../README.md"
 keywords = ["hyperish", "framework", "core", "toolchain", "reactive"]
 categories = ["development-tools"]
 
+[dependencies]
+hyve-core = { path = "../hyve-core", version = "0.0.1-alpha.0" }
+hyve-macros = { path = "../hyve-macros", version = "0.0.1-alpha.0" }
+hyve-serde = { path = "../hyve-serde", version = "0.0.1-alpha.0" }
+hyve-state = { path = "../hyve-state", version = "0.0.1-alpha.0" }
+hyve-validate = { path = "../hyve-validate", version = "0.0.1-alpha.0" }
+
 [lints]
 workspace = true
