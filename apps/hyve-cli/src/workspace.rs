@@ -94,9 +94,99 @@ impl Workspace {
     /// Runs `stage` in every framework tool that provides it (orbic, then
     /// serge); returns how many ran it.
     pub(crate) fn run_stages(&self, stage: &str, args: &[&str]) -> Result<usize, Fail> {
-        let mut ran = 0;
+        let tools = self.tools_for(stage)?;
+        for exe in &tools {
+            let status = Command::new(exe)
+                .arg(stage)
+                .args(args)
+                .current_dir(&self.root)
+                .status()
+                .map_err(|e| Fail::Failed(format!("`{exe}` could not be run: {e}"), None))?;
+            if !status.success() {
+                return Err(Fail::Child(status.code()));
+            }
+        }
+        Ok(tools.len())
+    }
+
+    /// Runs `stage` in every framework tool that provides it, all at once
+    /// (`preview`: long-running servers and windows). Each tool's stdin is a
+    /// pipe from `hyve` and `HYVE_STAGE_LIFELINE=stdin` tells it so: when the
+    /// pipe closes (`hyve` stops it or exits), the tool stops what it
+    /// started and exits. A tool that fails stops the others and `hyve`
+    /// ends with its exit code; a tool that succeeds leaves the others
+    /// running. Returns how many ran.
+    pub(crate) fn run_stage_together(&self, stage: &str, args: &[&str]) -> Result<usize, Fail> {
+        use std::process::Stdio;
+        use std::time::{Duration, Instant};
+        let tools = self.tools_for(stage)?;
+        let mut running = Vec::new();
+        for exe in &tools {
+            match Command::new(exe)
+                .arg(stage)
+                .args(args)
+                .current_dir(&self.root)
+                .env("HYVE_STAGE_LIFELINE", "stdin")
+                .stdin(Stdio::piped())
+                .spawn()
+            {
+                Ok(child) => running.push((exe.clone(), child)),
+                Err(e) => {
+                    stop_all(&mut running);
+                    return Err(Fail::Failed(format!("`{exe}` could not be run: {e}"), None));
+                }
+            }
+        }
+        loop {
+            let mut failed = None;
+            running.retain_mut(|(_, child)| match child.try_wait() {
+                Ok(Some(status)) => {
+                    if !status.success() && failed.is_none() {
+                        failed = Some(status.code());
+                    }
+                    false
+                }
+                Ok(None) => true,
+                Err(_) => false,
+            });
+            if let Some(code) = failed {
+                stop_all(&mut running);
+                return Err(Fail::Child(code));
+            }
+            if running.is_empty() {
+                return Ok(tools.len());
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        /// Closes every tool's stdin, waits a moment for it to stop what it
+        /// started, then kills what is left.
+        fn stop_all(running: &mut Vec<(String, std::process::Child)>) {
+            for (_, child) in running.iter_mut() {
+                drop(child.stdin.take());
+            }
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                running.retain_mut(|(_, c)| matches!(c.try_wait(), Ok(None)));
+                if running.is_empty() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            for (exe, child) in running.iter_mut() {
+                eprintln!("hyve: `{exe}` did not stop when asked; killing it");
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+
+    /// The framework tools that provide `stage` (orbic, then serge), after
+    /// checking each one's version against the workspace's `Cargo.lock`.
+    fn tools_for(&self, stage: &str) -> Result<Vec<String>, Fail> {
+        let mut tools = Vec::new();
         if self.frameworks.is_empty() {
-            return Ok(ran);
+            return Ok(tools);
         }
         let locked = self.locked_versions()?;
         for framework in &self.frameworks {
@@ -136,23 +226,11 @@ impl Workspace {
                     Some(install),
                 ));
             }
-            if !lines.any(|l| l == stage) {
-                continue;
+            if lines.any(|l| l == stage) {
+                tools.push(exe);
             }
-            let status = Command::new(&exe)
-                .arg(stage)
-                .args(args)
-                .current_dir(&self.root)
-                .status()
-                .map_err(|e| {
-                    Fail::Failed(format!("`{exe}` could not be run: {e}"), Some(install))
-                })?;
-            if !status.success() {
-                return Err(Fail::Child(status.code()));
-            }
-            ran += 1;
         }
-        Ok(ran)
+        Ok(tools)
     }
 
     /// `(name, version)` of the frameworks in `Cargo.lock` (written by a full

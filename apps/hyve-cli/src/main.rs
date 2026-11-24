@@ -274,11 +274,11 @@ fn preview(args: &[String]) -> Result<(), Fail> {
     }
     let ws = Workspace::find()?;
     let flags: Vec<&str> = args.iter().map(String::as_str).collect();
-    match ws.run_stages("preview", &flags)? {
+    match ws.run_stage_together("preview", &flags)? {
         0 => Err(Fail::Failed(
             "nothing to preview: no framework of this workspace provides a `preview` stage".into(),
             Some(
-                "`hyve preview` runs `hyve-serge preview`; add a serge app to the workspace".into(),
+                "`hyve preview` runs `hyve-serge preview` and `hyve-orbic preview`; add a serge app, or declare an orbic server (`[package.metadata.orbic.server]`)".into(),
             ),
         )),
         _ => Ok(()),

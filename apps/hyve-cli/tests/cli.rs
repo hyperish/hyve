@@ -341,3 +341,81 @@ fn stage_failures_and_version_mismatches_fail() {
         stderr(&o)
     );
 }
+
+/// A stand-in `hyve-<framework>` providing `preview`, whose `preview` runs
+/// the shell `body`.
+#[cfg(unix)]
+fn fake_preview_tool(bin: &Path, framework: &str, version: &str, body: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    let path = bin.join(format!("hyve-{framework}"));
+    let script = format!(
+        "#!/bin/sh\nif [ \"$1\" = stages ]; then printf '%s\\n' {version} preview; exit 0; fi\n{body}\n"
+    );
+    std::fs::create_dir_all(bin).unwrap();
+    std::fs::write(&path, script).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// `preview` stages run at the same time with a stdin lifeline: a stage
+/// that fails stops the others (they see their stdin close) and `hyve`
+/// ends with its code; a stage that succeeds leaves the others running; a
+/// stage that ignores the lifeline is killed after a grace period.
+#[cfg(unix)]
+#[test]
+fn preview_stages_run_together_and_stop_together() {
+    use std::time::{Duration, Instant};
+    let d = framework_workspace("0.1.0", Some("0.2.0"));
+    let bin = d.join("bin");
+    // orbic serves until its stdin closes; serge fails after a moment.
+    fake_preview_tool(
+        &bin,
+        "orbic",
+        "0.1.0",
+        "[ \"$HYVE_STAGE_LIFELINE\" = stdin ] || exit 9\necho \"orbic up $*\" >> \"$HYVE_FAKE_LOG\"\ncat > /dev/null\necho 'orbic stopped' >> \"$HYVE_FAKE_LOG\"",
+    );
+    fake_preview_tool(
+        &bin,
+        "serge",
+        "0.2.0",
+        "echo \"serge up $*\" >> \"$HYVE_FAKE_LOG\"\nsleep 1\nexit 4",
+    );
+    let t = Instant::now();
+    let (o, log) = hyve_with_tools(&d, &bin, &["preview", "--web"]);
+    assert_eq!(o.status.code(), Some(4), "{}", stderr(&o));
+    assert!(t.elapsed() < Duration::from_secs(4), "{:?}", t.elapsed());
+    assert!(
+        log.contains("orbic up preview --web") && log.contains("serge up preview --web"),
+        "{log}"
+    );
+    assert!(log.ends_with("orbic stopped\n"), "orbic was stopped: {log}");
+
+    // A stage that ends well does not stop the others.
+    fake_preview_tool(
+        &bin,
+        "serge",
+        "0.2.0",
+        "echo 'serge done' >> \"$HYVE_FAKE_LOG\"",
+    );
+    fake_preview_tool(
+        &bin,
+        "orbic",
+        "0.1.0",
+        "sleep 1\necho 'orbic done' >> \"$HYVE_FAKE_LOG\"",
+    );
+    let (o, log) = hyve_with_tools(&d, &bin, &["preview"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(log, "serge done\norbic done\n");
+
+    // A stage that ignores its lifeline is killed.
+    fake_preview_tool(&bin, "orbic", "0.1.0", "exec sleep 60");
+    fake_preview_tool(&bin, "serge", "0.2.0", "sleep 0.3\nexit 5");
+    let t = Instant::now();
+    let (o, _) = hyve_with_tools(&d, &bin, &["preview"]);
+    assert_eq!(o.status.code(), Some(5), "{}", stderr(&o));
+    assert!(
+        stderr(&o).contains("did not stop when asked"),
+        "{}",
+        stderr(&o)
+    );
+    assert!(t.elapsed() < Duration::from_secs(10), "{:?}", t.elapsed());
+}
