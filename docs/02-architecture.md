@@ -1,6 +1,6 @@
 # 02. 아키텍처와 크레이트 구조 (hyve)
 
-> 상태: `apps/`·`crates/` 모노레포 및 코어 `ref` 역할은 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-19
+> 상태: `apps/`·`crates/` 모노레포 및 코어 `ref` 역할은 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-24
 
 `hyve` 레포는 Cargo 워크스페이스 기반의 모노레포(`apps/`, `crates/`)로 구성합니다(`hyperish/docs`의 `05-development-rules.md` §1).
 
@@ -13,7 +13,7 @@ hyve/
   crates/
     hyve/              # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
     hyve-core/         # 수명, 소유권, 오류, 취소 토큰, 기본 타입(Ulid, Timestamp), Lock-Free/Shm 공용 Ring Buffer(`SharedRingBuf`), Ctx<T>
-    hyve-macros/       # 범용 코어 proc macro (`#[model]`, `#[validate]`, `#[hyve::test]`, `asset!`, proc-macro = true)
+    hyve-macros/       # 범용 코어 proc macro (`#[model]`, `#[validate]`, `#[hyve::test]`, `#[server]`/`#[server_ctx]`, `asset!`, proc-macro = true)
     hyve-state/        # 범용 반응형 상태(`signal(init)`, memo, effect, store) 및 스냅샷 모델
     hyve-serde/        # 고성능 내부 직렬화·역직렬화 코어 + 포맷 어댑터 트레이트
     hyve-validate/     # 범용 데이터 검증(`#[validate]`, `Valid<T>`) 및 타입/제약 스키마 메타데이터
@@ -30,7 +30,7 @@ hyve/
 ## 2. 코어 모듈별 책임 (제안)
 
 ### 2.1 `hyve-core` (기반 계약 · 공용 Ring Buffer · 컴포넌트 컨텍스트)
-- 식별자(ID), 시각, 상관관계 ID(`RequestId`/`TraceId`), 구조화된 오류 분류(`Domain` / `Infra` / `Internal`), 구조적 취소(`CancellationToken`), 컴포넌트 컨텍스트(`Ctx<T>`) 계약을 제공합니다.
+- 식별자(ID), 시각, 상관관계 ID(`RequestId`/`TraceId`), 구조화된 오류 분류(`Domain` / `Infra` / `Internal`), 구조적 취소(`CancellationToken`), 컴포넌트 컨텍스트(`Ctx<T>`) 계약을 제공합니다. `Ctx<T>`는 주입된 값의 스코프(앱·컴포넌트·요청) 동안만 유효한 대여 핸들이며, 요청 스코프 값은 요청이 끝나면 해제됩니다.
 - 인프로세스 스레드 간 및 로컬 멀티프로세스 공유 메모리(`shm`/`mmap`) 간에 대용량·120fps 실시간 스트림을 락·복사 없이 주고받는 **Lock-Free SPSC/MPMC 공용 링 버퍼(`SharedRingBuf<T>`)** 프리미티브를 제공합니다. OS 공유 메모리(`shm`) 모드는 Rust 메모리 안전성(`unsafe` 근거 주석 필수)을 위해 다음 계약을 강제합니다:
   - **레이아웃 제약**: `#[repr(C)]` 고정 크기 POD(`Pod + Zeroable`) 타입 또는 검증된 바이트 프레이밍 전용이며, 힙 포인터(`String`, `Vec` 등)나 레이아웃 미보장 타입의 직접 배치를 컴파일 타임에 금지합니다.
   - **찢어짐(Tearing) 방지**: Producer가 고속으로 덮어쓰는 환경에서 불안정한 원시 슬라이스 대여를 허용하지 않고, 스냅샷 복사(seqlock/더블·트리플 버퍼) 또는 명시적 읽기 가드(`ReadGuard`) 모델을 강제합니다.
@@ -42,23 +42,27 @@ hyve/
   - 크로스플랫폼 컴포넌트 시그니처와 비동기 캡처 시 타입 마찰을 없애기 위해 기본 공개 타입은 단일 `Copy` 아레나 핸들 **`Signal<T>`**로 통일합니다(`!Send` 로컬 값만 `LocalSignal<T>` 옵트인).
   - 내부 구현은 타깃별로 분기해 단일 스레드 경로(WASM 웹 및 네이티브 메인 스레드)에서는 원자적 락 없는 인덱스 아레나로, 멀티스레드 공유 경로에서는 `Send + Sync` 스토리지로 동작합니다.
 - 읽기 참조 대여와 명시적 변경 요청 규칙을 타입 수준에서 강제합니다.
+- 시그널·메모·이펙트는 생성된 소유 스코프(컴포넌트·기능·요청)에 속하고, 스코프가 해제되면 아레나 슬롯을 반환합니다. 해제된 핸들 접근은 조용한 오동작이 아니라 감지되는 실패여야 합니다.
 
 ### 2.3 `hyve-serde` · `hyve-validate` · `hyve-parser` (직렬화·검증·파서·범용 스키마)
 - **단일 내부 바이너리 와이어 포맷 (`rkyv` 확정, 2026-11-19)**: 내부 직렬화는 `rkyv`(MIT, `bytecheck` 검증 기반 제로카피 역직렬화)를 단일 기준으로 사용해 Tier 2 Shm IPC·MSA·SSR 상태·고속 Dual-Rail을 한 코덱으로 통합하고, JSON(`serde_json`) 등 외부 표준 포맷은 어댑터로 분리합니다.
+  - **호환 규칙 (제안)**: `rkyv` 아카이브는 스키마 진화를 지원하지 않으므로(공식 기능 비교표, 2026-11-24 확인: https://rkyv.org/feature-comparison) 고속 레일은 양쪽의 `#[model]` 스키마가 같을 때만 쓰고, 다르면 표준 레일(JSON 어댑터)로 폴백합니다(`hyperish/docs` `02-core-contracts.md` §5). 신뢰 경계를 넘어온 바이트는 `bytecheck` 검증을 거친 뒤에만 접근합니다. 포맷 제어 피처(엔디언 `little_endian`/`big_endian`, 정렬 `aligned`/`unaligned`, 포인터 폭 `pointer_width_16`/`32`/`64`)는 패밀리 전체에서 한 조합으로 고정합니다. `usize`/`isize`는 타깃의 포인터 폭이 아니라 이 피처가 정한 폭(기본 32비트)으로 직렬화되므로, WASM(32비트)과 네이티브(64비트)가 같은 조합을 써야 같은 아카이브를 읽습니다(`rkyv` 크레이트 문서 "Format control", 2026-11-24 확인: https://docs.rs/rkyv/latest/rkyv/ · 피처 이름은 `cargo info rkyv@0.8.18`로 확인).
 - `hyve-validate`는 웹/서버에 종속되지 않는 **범용 구조체·데이터 검증 및 스키마 리플렉션**(`len`, `range`, 패턴, 커스텀 불변조건 등)을 제공합니다. 설정 파일, 에셋 데이터, UI 입력, 서버 요청 어디서든 동일하게 재사용됩니다.
-- `hyve-parser`는 매크로 구문 분석(`hyve-macros`, `serge-macros`, `orbic-macros`)과 런타임 스키마·에셋·데이터 포맷 파싱을 모두 뒷받침하는 저할당 파서 콤비네이터/토크나이저 기반을 제공합니다.
+- `hyve-parser`는 매크로 구문 분석(`hyve-macros`, `serge-macros`, `orbic-macros`)과 런타임 스키마·에셋·데이터 포맷 파싱을 모두 뒷받침하는 저할당 파서 콤비네이터/토크나이저 기반을 제공합니다. `hyve-parser`와 `hyve-diagnostics`는 매크로 크레이트의 빌드 의존성이므로 `hyve-macros`나 진입 크레이트(`hyve`)에 의존하지 않습니다.
 
 ### 2.4 `hyve-api` (범용 규격 인터페이스 통합)
-- 모듈·프로세스·네트워크 경계를 넘는 서비스·리소스·이벤트 계약(Contract)과 `#[server]` 인라인 서버 함수 계약을 정의합니다. `hyve` 자체는 HTTP나 OpenAPI 같은 특정 프로토콜 규격을 포함하지 않으며, 백엔드(`orbic`)가 이 범용 스키마·인터페이스를 읽어들여 컴포넌트 라우터 바인딩이나 OpenAPI 문서로 변환합니다.
+- 모듈·프로세스·네트워크 경계를 넘는 서비스·리소스·이벤트 계약(Contract)과 `#[server]` 인라인 서버 함수 계약을 정의합니다. `hyve` 자체는 HTTP나 OpenAPI 같은 특정 프로토콜 규격을 포함하지 않으며, 백엔드(`orbic`)가 이 범용 스키마·인터페이스를 읽어들여 컴포넌트 라우터 바인딩이나 OpenAPI 문서로 변환합니다. `#[server(POST "/projects")]`의 메서드·경로 인자도 `hyve`는 해석하지 않고 계약 디스크립터에 바인딩 메타데이터로 그대로 싣습니다. 이를 HTTP 라우트로 해석하는 주체는 `orbic`뿐입니다.
 
 ## 3. 확정 MIT 포크 스택 및 내부 코어 `unit optimization` 타깃 (2026-11-19 확정)
 
-전 크레이트는 **순수 `MIT` 라이선스**를 유지하기 위해 `MIT` 단독 또는 `MIT OR Apache-2.0`(MIT 선택) 크레이트만 포크합니다(`docs/05-development-rules.md` §7).
+전 크레이트는 **순수 `MIT` 라이선스**를 유지하기 위해 `MIT` 단독 또는 `MIT OR Apache-2.0`(MIT 선택) 크레이트만 포크합니다(`hyperish/docs` `05-development-rules.md` §7).
+
+표의 버전·라이선스는 crates.io 레지스트리(`cargo info <크레이트>@<버전>`)에서 2026-11-24에 확인한 스냅샷입니다. 확정된 것은 베이스 크레이트의 선택이며, 포크 기준 리비전은 착수 시점에 다시 확인해 고정합니다.
 
 | 모듈 | 베이스 크레이트 (확인 버전 · 라이선스) | 포크 후 내부 코어 개조(1·2단계 `unit optimization`) 방향 |
 |---|---|---|
 | `hyve-serde` | `rkyv` (`0.8.18`, `MIT`) · 외부 어댑터 `serde_json` (`1.0.154`, `MIT/Apache-2.0`) | `#[model]` 직결 및 `bytecheck` 검증 제로카피 경로 고정 (0할당 포인터 캐스팅 유지) |
-| `hyve-state` | `reactive_graph` (`0.3.0-rc1`, `MIT`) + `slotmap` (`1.1.1`, `Zlib`) | 범용 멀티-런타임·`AnySubscriber` 동적 디스패치 전면 제거 → 단일 스레드 무잠금 인덱스 아레나 + **SoA(값 배열/구독자 비트셋 분리)** 개조 |
+| `hyve-state` | `reactive_graph` (`0.3.0-rc1`, `MIT`) · 아레나 설계 레퍼런스 `slotmap` (`1.1.1`, `Zlib` 단독 — 포크·편입 없이 레퍼런스 전용) | 범용 멀티-런타임·`AnySubscriber` 동적 디스패치 전면 제거 → 자체 구현 단일 스레드 무잠금 인덱스 아레나 + **SoA(값 배열/구독자 비트셋 분리)** 개조 |
 | `hyve-parser` | `winnow` (`1.0.5`, `MIT`) | 제로카피 슬라이스 파싱을 `hyve` 진단 스팬과 직결 |
 | `hyve-diagnostics` | `ariadne` (`0.6.0`, `MIT`) | 컴파일 타임/런타임 스팬·수정 가이드 출력 경량화 |
-| `hyve-core` | `ulid` (`3.0.0`, `MIT`), `bytemuck` (`1.25.2`, `MIT/Apache-2.0/Zlib`), `rtrb` (`0.4.1`) / `crossbeam-queue` (`0.3.14`, `MIT/Apache-2.0`) | `#[repr(C)]` POD 검증 + `SharedRingBuf<T>` 인프로세스/OS `shm` 안전 스냅샷·`ReadGuard` 직결 |
+| `hyve-core` | `ulid` (`3.0.0`, `MIT`), `bytemuck` (`1.25.2`, `MIT/Apache-2.0/Zlib`), `rtrb` (`0.4.1`, `MIT OR Apache-2.0`) / `crossbeam-queue` (`0.3.14`, `MIT/Apache-2.0`) | `#[repr(C)]` POD 검증 + `SharedRingBuf<T>` 인프로세스/OS `shm` 안전 스냅샷·`ReadGuard` 직결 |
