@@ -151,6 +151,11 @@ impl FieldPath {
 }
 
 /// Types that can check their own invariants.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be validated as a `#[model]` field",
+    label = "not a model type",
+    note = "declare it with `#[model]`, or use a supported type (numbers, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, maps with `String` keys)"
+)]
 ///
 /// `#[model]` implements this; std and `hyve-core` types implement it as "always
 /// valid" while still recursing into containers.

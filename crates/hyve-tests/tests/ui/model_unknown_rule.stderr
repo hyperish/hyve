@@ -1,0 +1,6 @@
+error: unknown validation rule `pattern`
+         = help: Phase 1 rules are `len = <range>` and `range = <range>`, e.g. `#[validate(len = 1..=80)]` or `#[validate(range = 30..=240)]`
+ --> tests/ui/model_unknown_rule.rs:5:16
+  |
+5 |     #[validate(pattern = "^[a-z]+$")]
+  |                ^^^^^^^

@@ -1,0 +1,96 @@
+error[E0277]: `Duration` has no JSON codec, so it cannot appear in a `#[model]` or `#[server]` signature
+ --> tests/ui/model_non_wire_field.rs:3:1
+  |
+3 | #[model]
+  | ^^^^^^^^ not a wire type
+  |
+  = help: the trait `hyve::hyve_serde::Json` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `hyve::hyve_serde::Json`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            ErrorBody
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Job
+          and $N others
+  = note: this error originates in the attribute macro `model` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Duration` has no JSON codec, so it cannot appear in a `#[model]` or `#[server]` signature
+ --> tests/ui/model_non_wire_field.rs:5:18
+  |
+5 |     pub timeout: std::time::Duration,
+  |                  ^^^^^^^^^^^^^^^^^^^ not a wire type
+  |
+  = help: the trait `hyve::hyve_serde::Json` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `hyve::hyve_serde::Json`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            ErrorBody
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Job
+          and $N others
+
+error[E0277]: `Duration` cannot be validated as a `#[model]` field
+ --> tests/ui/model_non_wire_field.rs:3:1
+  |
+3 | #[model]
+  | ^^^^^^^^ not a model type
+  |
+  = help: the trait `Validate` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (numbers, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, maps with `String` keys)
+  = help: the following other types implement trait `Validate`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Job
+            Option<T>
+          and $N others
+  = note: this error originates in the attribute macro `model` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Duration` is not a wire type (it has no schema metadata)
+ --> tests/ui/model_non_wire_field.rs:5:18
+  |
+5 |     pub timeout: std::time::Duration,
+  |                  ^^^^^^^^^^^^^^^^^^^ not a wire type
+  |
+  = help: the trait `Schema` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `Schema`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Job
+            Option<T>
+          and $N others
+
+error[E0277]: `Duration` is not a wire type (it has no schema fingerprint)
+ --> tests/ui/model_non_wire_field.rs:5:18
+  |
+5 |     pub timeout: std::time::Duration,
+  |                  ^^^^^^^^^^^^^^^^^^^ not a wire type
+  |
+  = help: the trait `Fingerprint` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `Fingerprint`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            ErrorWire
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Job
+          and $N others

@@ -1,0 +1,6 @@
+error: `#[server]` functions must return `HyveResult<T>`
+         = help: return `HyveResult<T>` (or `Result<T, HyveError>`), e.g. `-> HyveResult<Project>`; use `HyveResult<()>` for no value
+ --> tests/ui/server_bad_return.rs:4:25
+  |
+4 | pub async fn count() -> u32 {
+  |                         ^^^

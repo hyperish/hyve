@@ -1,0 +1,6 @@
+error: `#[model]` structs need named fields
+         = help: give each field a name: `pub struct Point { pub x: f64, pub y: f64 }`
+ --> tests/ui/model_tuple_struct.rs:4:17
+  |
+4 | pub struct Point(f64, f64);
+  |                 ^^^^^^^^^^

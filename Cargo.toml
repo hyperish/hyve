@@ -1,11 +1,14 @@
 [workspace]
 members = [
+    "crates/hyve",
     "crates/hyve-api",
     "crates/hyve-core",
     "crates/hyve-diagnostics",
+    "crates/hyve-macros",
     "crates/hyve-parser",
     "crates/hyve-serde",
     "crates/hyve-state",
+    "crates/hyve-tests",
     "crates/hyve-validate",
 ]
 resolver = "3"
@@ -20,9 +23,11 @@ authors = ["Hyperish Contributors"]
 
 [workspace.dependencies]
 # Internal crates: path + exact version (hyperish/docs 05-development-rules.md §5).
+hyve = { path = "crates/hyve", version = "=0.1.0-alpha.0" }
 hyve-api = { path = "crates/hyve-api", version = "=0.1.0-alpha.0" }
 hyve-core = { path = "crates/hyve-core", version = "=0.1.0-alpha.0" }
 hyve-diagnostics = { path = "crates/hyve-diagnostics", version = "=0.1.0-alpha.0" }
+hyve-macros = { path = "crates/hyve-macros", version = "=0.1.0-alpha.0" }
 hyve-parser = { path = "crates/hyve-parser", version = "=0.1.0-alpha.0" }
 hyve-serde = { path = "crates/hyve-serde", version = "=0.1.0-alpha.0" }
 hyve-state = { path = "crates/hyve-state", version = "=0.1.0-alpha.0" }
@@ -37,6 +42,13 @@ getrandom = "=0.4.3"
 js-sys = "=0.3.107"
 wasm-bindgen-test = "=0.3.80"
 winnow = "=1.0.5"
+
+# External dependencies, not forked (docs/02-architecture.md §2.5): caret requirements.
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+syn = { version = "2.0.119", features = ["full"] }
+tokio = { version = "1.47", default-features = false }
+trybuild = "1.0.110"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

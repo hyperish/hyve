@@ -1,0 +1,6 @@
+error: `#[server_ctx]` works only on `Ctx<T>` arguments of a `#[server]` function
+         = help: write `#[server(POST "/projects")] pub async fn create(#[server_ctx] db: Ctx<Db>, …)`
+ --> tests/ui/server_ctx_outside_server.rs:4:1
+  |
+4 | pub struct Db;
+  | ^^^

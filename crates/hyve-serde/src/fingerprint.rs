@@ -42,6 +42,11 @@ pub const FORMAT_FINGERPRINT: u64 =
     fnv1a(b"rkyv=0.8.18;little_endian;aligned;pointer_width_32;json=hyve-1");
 
 /// A type's compile-time wire-layout fingerprint.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a wire type (it has no schema fingerprint)",
+    label = "not a wire type",
+    note = "declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)"
+)]
 pub trait Fingerprint {
     /// The fingerprint.
     const FINGERPRINT: u64;

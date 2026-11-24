@@ -1,0 +1,6 @@
+error: `#[server_ctx]` applies only to `Ctx<T>` arguments
+         = help: inject server-side values as `#[server_ctx] db: Ctx<Db>`; other arguments are sent by the caller
+ --> tests/ui/server_ctx_not_ctx.rs:4:41
+  |
+4 | pub async fn create(#[server_ctx] name: String) -> HyveResult<()> {
+  |                                         ^^^^^^

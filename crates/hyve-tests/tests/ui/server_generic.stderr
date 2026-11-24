@@ -1,0 +1,6 @@
+error: `#[server]` functions cannot be generic
+         = help: use concrete request and response types (declare them with `#[model]`)
+ --> tests/ui/server_generic.rs:4:18
+  |
+4 | pub async fn echo<T>(value: T) -> HyveResult<T> {
+  |                  ^

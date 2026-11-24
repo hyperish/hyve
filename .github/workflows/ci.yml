@@ -28,6 +28,12 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run tests
         run: cargo test --workspace --locked
+      # The fixture crate plays an app's shared crate; `#[server]` handler
+      # bodies exist only with its `server` feature, so test both builds.
+      - name: Lint and test with the server feature
+        run: |
+          cargo clippy -p hyve-tests --all-targets --features server --locked -- -D warnings
+          cargo test -p hyve-tests --features server --locked
 
   msrv:
     name: Build on the declared minimum Rust version
@@ -59,4 +65,5 @@ jobs:
       - name: Install wasm-bindgen test runner
         run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
       - name: Run wasm32 tests
-        run: cargo test --workspace --locked --target wasm32-unknown-unknown --exclude hyve-cli --exclude hyve-macros
+        # hyve-tests uses `#[hyve::test]`, a compile-time error on wasm32 in Phase 1.
+        run: cargo test --workspace --locked --target wasm32-unknown-unknown --exclude hyve-cli --exclude hyve-macros --exclude hyve-tests

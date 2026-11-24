@@ -1,0 +1,13 @@
+error: unknown method `PUT` in `#[server]`
+         = help: `PUT` is not supported; write `#[server(POST "/projects")]`: one of GET, POST, PATCH, DELETE and a path starting with `/`
+ --> tests/ui/server_unknown_method.rs:3:10
+  |
+3 | #[server(PUT "/projects")]
+  |          ^^^
+
+error: unknown method `post` in `#[server]`
+         = help: write the method in upper case: `POST`
+ --> tests/ui/server_unknown_method.rs:8:10
+  |
+8 | #[server(post "/projects")]
+  |          ^^^^

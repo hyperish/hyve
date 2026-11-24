@@ -198,6 +198,11 @@ pub fn generic_name(base: &str, args: &[SchemaNode]) -> String {
 }
 
 /// Types that can describe their shape.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a wire type (it has no schema metadata)",
+    label = "not a wire type",
+    note = "declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)"
+)]
 pub trait Schema {
     /// The shape of `Self`; named types register themselves in `registry`.
     fn schema(registry: &mut SchemaRegistry) -> SchemaNode;

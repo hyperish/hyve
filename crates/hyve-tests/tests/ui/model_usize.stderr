@@ -1,0 +1,6 @@
+error: `usize`/`isize` are not wire types
+         = help: use `u32`/`u64` or `i32`/`i64`: the binary format fixes `usize` at 32 bits, so larger values would not survive the fast rail
+ --> tests/ui/model_usize.rs:5:21
+  |
+5 |     pub counts: Vec<usize>,
+  |                     ^^^^^

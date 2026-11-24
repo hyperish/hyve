@@ -1,0 +1,13 @@
+error: invalid `#[server]` path "projects": it must start with `/`
+         = help: write a path such as "/projects" or "/projects/{id}"
+ --> tests/ui/server_bad_path.rs:3:14
+  |
+3 | #[server(GET "projects")]
+  |              ^^^^^^^^^^
+
+error: invalid `#[server]` path "/projects/{id": unmatched `{`
+         = help: write a path such as "/projects" or "/projects/{id}"
+ --> tests/ui/server_bad_path.rs:8:14
+  |
+8 | #[server(GET "/projects/{id")]
+  |              ^^^^^^^^^^^^^^^

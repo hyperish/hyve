@@ -1,0 +1,6 @@
+error: `#[validate]` works only on fields of a `#[model]` struct
+         = help: add `#[model]` to the struct and put the rule on a field: `#[validate(len = 1..=80)] pub title: String`
+ --> tests/ui/validate_outside_model.rs:4:1
+  |
+4 | pub struct User {
+  | ^^^

@@ -1,0 +1,6 @@
+error: `#[server]` functions must be `async`
+         = help: write `pub async fn …`
+ --> tests/ui/server_not_async.rs:4:5
+  |
+4 | pub fn create() -> HyveResult<()> {
+  |     ^^

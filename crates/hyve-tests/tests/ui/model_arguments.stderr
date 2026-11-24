@@ -1,0 +1,6 @@
+error: `#[model]` takes no arguments, found `rename_all`
+         = help: write `#[model]` and put rules on fields: `#[validate(len = 1..=80)] pub name: String`
+ --> tests/ui/model_arguments.rs:3:9
+  |
+3 | #[model(rename_all = "snake_case")]
+  |         ^^^^^^^^^^

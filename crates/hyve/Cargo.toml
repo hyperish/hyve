@@ -1,0 +1,33 @@
+[package]
+name = "hyve"
+description = "All-in-one Rust core for the Hyperish family: models, validation, codecs, reactive state and contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "../../README.md"
+keywords = ["hyperish", "framework", "model", "reactive", "validation"]
+categories = ["development-tools", "encoding", "web-programming"]
+
+[features]
+## Runtime for `#[hyve::test]` (native only). Enable it for tests:
+## `[dev-dependencies] hyve = { version = "…", features = ["test"] }`.
+test = ["dep:tokio"]
+
+[dependencies]
+hyve-api.workspace = true
+hyve-core.workspace = true
+hyve-diagnostics.workspace = true
+hyve-macros.workspace = true
+hyve-parser.workspace = true
+hyve-serde.workspace = true
+hyve-state.workspace = true
+hyve-validate.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, optional = true, features = ["rt", "time"] }
+
+[lints]
+workspace = true
