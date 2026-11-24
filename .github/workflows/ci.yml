@@ -8,10 +8,13 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Must match `rust-version` in Cargo.toml (hyperish/docs 05-development-rules.md §8).
+  MSRV: "1.85"
+  WASM_BINDGEN_VERSION: "0.2.130"
 
 jobs:
   check:
-    name: Format, Clippy & Test
+    name: Format, Clippy & Test (stable)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +25,38 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
+
+  msrv:
+    name: Build on the declared minimum Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Check (native)
+        run: cargo check --workspace --locked
+      - name: Check (wasm32)
+        run: cargo check --workspace --locked --target wasm32-unknown-unknown --exclude hyve-cli
+
+  wasm:
+    name: Tests on wasm32 (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-bindgen test runner
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
+      - name: Run wasm32 tests
+        run: cargo test --workspace --locked --target wasm32-unknown-unknown --exclude hyve-cli --exclude hyve-macros

@@ -1,13 +1,23 @@
 [package]
 name = "hyve-core"
-description = "Foundational types, errors, cancellation, context, and lock-free ring buffers for the Hyperish family"
+description = "Foundational contracts for the Hyperish family: errors, IDs, time, cancellation, scopes, ring buffers"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 authors.workspace = true
+
+[dependencies]
+bytemuck.workspace = true
+getrandom.workspace = true
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
+js-sys.workspace = true
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+wasm-bindgen-test.workspace = true
 
 [lints]
 workspace = true
