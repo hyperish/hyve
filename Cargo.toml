@@ -4,6 +4,7 @@ members = [
     "crates/hyve-diagnostics",
     "crates/hyve-parser",
     "crates/hyve-serde",
+    "crates/hyve-validate",
 ]
 resolver = "3"
 
@@ -21,6 +22,7 @@ hyve-core = { path = "crates/hyve-core", version = "=0.1.0-alpha.0" }
 hyve-diagnostics = { path = "crates/hyve-diagnostics", version = "=0.1.0-alpha.0" }
 hyve-parser = { path = "crates/hyve-parser", version = "=0.1.0-alpha.0" }
 hyve-serde = { path = "crates/hyve-serde", version = "=0.1.0-alpha.0" }
+hyve-validate = { path = "crates/hyve-validate", version = "=0.1.0-alpha.0" }
 
 # Pinned third-party crates (docs/02-architecture.md §3).
 ariadne = "=0.6.0"

@@ -186,6 +186,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyve-validate"
+version = "0.1.0-alpha.0"
+dependencies = [
+ "hyve-core",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
