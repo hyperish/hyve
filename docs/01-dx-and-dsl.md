@@ -70,7 +70,7 @@ Node.js에서 `npm` + `vite` + `vitest` + `eslint`를 따로 설치·설정하�
 - 알 수 없는 템플릿 이름과 옵션은 오류입니다.
 - **Phase 1의 이름**: `hyve init --template <이름>`의 템플릿은 `fullstack`, `serge-app`, `orbic-service` 셋입니다. 덮어쓰기 옵션은 `--force`입니다. `hyve preview`는 `--web`과 `--native`로 UI 타깃을 고르고, 둘 다 없으면 워크스페이스에 있는 대상을 모두 띄웁니다. 템플릿이 적는 `hyve`·`orbic`·`serge` 버전 요구는 그 CLI 릴리스와 함께 검증한 버전입니다.
 - **설치**: 실행 파일 `hyve`는 `hyve-cli` 패키지가 제공합니다.
-- **프레임워크 단계 호출**: `hyve-cli`는 `orbic`과 `serge`를 링크하지 않습니다(의존 방향은 `orbic`, `serge` → `hyve`). 각 프레임워크는 자기 단계를 `hyve-<프레임워크>` 실행 파일(`hyve-orbic`, `hyve-serge`)로 제공하고, `hyve`는 대상 워크스페이스가 의존하는 프레임워크의 실행 파일을 같은 하위 명령 이름으로 호출합니다(`hyve codegen` → `hyve-orbic codegen`). 실행 파일이 없거나 워크스페이스가 쓰는 프레임워크 버전과 다르면 설치 방법을 알리고 오류로 끝냅니다. 하위 프로세스의 종료 코드가 0이 아니면 `hyve`도 실패합니다.
+- **프레임워크 단계 호출**: `hyve-cli`는 `orbic`과 `serge`를 링크하지 않습니다(의존 방향은 `orbic`, `serge` → `hyve`). 각 프레임워크는 자기 단계를 `hyve-<프레임워크>` 실행 파일(`hyve-orbic`, `hyve-serge`)로 제공하고, `hyve`는 대상 워크스페이스가 의존하는 프레임워크의 실행 파일을 같은 하위 명령 이름으로 호출합니다(`hyve codegen` → `hyve-orbic codegen`). `hyve`는 먼저 각 실행 파일에 제공하는 단계 목록을 물어(`hyve-<프레임워크> stages`) 제공하는 단계만 `orbic`, `serge` 순서로 호출하고, 버전은 실행 파일이 알려 준 값과 워크스페이스 `Cargo.lock`의 프레임워크 버전을 비교합니다. 실행 파일이 없거나 워크스페이스가 쓰는 프레임워크 버전과 다르면 설치 방법을 알리고 오류로 끝냅니다. 하위 프로세스의 종료 코드가 0이 아니면 `hyve`도 실패합니다.
 - **`codegen`**: Phase 1의 `hyve codegen`은 프레임워크 단계를 순서대로 실행하는 것이 전부이고, `hyve codegen --check`는 생성물이 현재 소스와 일치하는지만 확인해 다르면 실패합니다. Phase 1에서 단계를 제공하는 것은 `orbic`의 `sql!` 캐시입니다(`orbic/docs/01-dx-and-dsl.md` §4).
 
 ## 3. 진단 메시지 원칙
