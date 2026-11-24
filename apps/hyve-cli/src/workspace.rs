@@ -74,6 +74,11 @@ impl Workspace {
         Ok(Workspace { root, frameworks })
     }
 
+    /// Whether a member depends on `orbic` or `serge` directly.
+    pub(crate) fn uses_frameworks(&self) -> bool {
+        !self.frameworks.is_empty()
+    }
+
     /// `cargo <subcommand>` run in the workspace root.
     pub(crate) fn cargo(&self, subcommand: &str) -> Command {
         let mut cmd = Command::new(cargo());
@@ -81,22 +86,105 @@ impl Workspace {
         cmd
     }
 
-    /// Fails when the workspace needs framework stages, which this release
-    /// cannot call yet (`docs/01-dx-and-dsl.md` §2, "프레임워크 단계 호출").
-    pub(crate) fn require_no_framework_stages(&self, command: &str) -> Result<(), Fail> {
+    /// Runs `stage` of every framework the workspace uses that provides it,
+    /// `orbic` before `serge` (`docs/01-dx-and-dsl.md` §2, 프레임워크 단계
+    /// 호출): `hyve-<framework> stages` says the executable's version (first
+    /// line) and its stages (one per line); the version must equal the
+    /// framework's in the workspace's `Cargo.lock`.
+    pub(crate) fn run_stages(&self, stage: &str, args: &[&str]) -> Result<(), Fail> {
         if self.frameworks.is_empty() {
             return Ok(());
         }
-        let names: Vec<String> = self
-            .frameworks
-            .iter()
-            .map(|f| format!("hyve-{f}"))
-            .collect();
-        Err(Fail::NotImplemented(format!(
-            "`{command}` for a workspace that uses {} (calling the {} stages)",
-            self.frameworks.join(" and "),
-            names.join(" and ")
-        )))
+        let locked = self.locked_versions()?;
+        for framework in &self.frameworks {
+            let exe = format!("hyve-{framework}");
+            let want = locked
+                .iter()
+                .find(|(n, _)| n == framework)
+                .map(|(_, v)| v.as_str());
+            let install = format!(
+                "install it: `cargo install {framework}-cli{}`",
+                want.map(|v| format!(" --version ={v}")).unwrap_or_default()
+            );
+            let out = Command::new(&exe)
+                .arg("stages")
+                .current_dir(&self.root)
+                .output()
+                .map_err(|e| {
+                    Fail::Failed(
+                        format!("`{exe}` could not be run: {e}"),
+                        Some(install.clone()),
+                    )
+                })?;
+            if !out.status.success() {
+                return Err(Fail::Failed(
+                    format!("`{exe} stages` failed"),
+                    Some(install),
+                ));
+            }
+            let text = String::from_utf8_lossy(&out.stdout);
+            let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
+            let version = lines.next().unwrap_or_default().to_owned();
+            if let Some(want) = want.filter(|w| *w != version) {
+                return Err(Fail::Failed(
+                    format!(
+                        "`{exe}` is {framework} {version}, but this workspace uses {framework} {want}"
+                    ),
+                    Some(install),
+                ));
+            }
+            if !lines.any(|l| l == stage) {
+                continue;
+            }
+            let status = Command::new(&exe)
+                .arg(stage)
+                .args(args)
+                .current_dir(&self.root)
+                .status()
+                .map_err(|e| {
+                    Fail::Failed(format!("`{exe}` could not be run: {e}"), Some(install))
+                })?;
+            if !status.success() {
+                return Err(Fail::Child(status.code()));
+            }
+        }
+        Ok(())
+    }
+
+    /// `(name, version)` of the frameworks in `Cargo.lock` (written by a full
+    /// `cargo metadata` when missing).
+    fn locked_versions(&self) -> Result<Vec<(String, String)>, Fail> {
+        let lock = self.root.join("Cargo.lock");
+        if !lock.exists() {
+            let out = self
+                .cargo("metadata")
+                .args(["--format-version", "1"])
+                .output()
+                .map_err(|e| Fail::Failed(format!("could not run cargo: {e}"), None))?;
+            if !out.status.success() {
+                return Err(Fail::Failed(
+                    "`cargo metadata` could not resolve the workspace".into(),
+                    None,
+                ));
+            }
+        }
+        let text = std::fs::read_to_string(&lock)
+            .map_err(|e| Fail::Failed(format!("could not read Cargo.lock: {e}"), None))?;
+        let mut found = Vec::new();
+        for block in text.split("[[package]]").skip(1) {
+            let field = |key: &str| {
+                block.lines().find_map(|l| {
+                    let (k, v) = l.split_once('=')?;
+                    (k.trim() == key).then(|| v.trim().trim_matches('"').to_owned())
+                })
+            };
+            if let (Some(name), Some(version)) = (field("name"), field("version")) {
+                if FRAMEWORKS.contains(&name.as_str()) {
+                    found.push((name, version));
+                }
+            }
+        }
+        Ok(found)
     }
 }
 

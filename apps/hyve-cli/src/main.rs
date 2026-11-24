@@ -211,7 +211,7 @@ fn test(args: &[String]) -> Result<(), Fail> {
 fn build(args: &[String]) -> Result<(), Fail> {
     let o = cargo_options("build", args, &["--debug"])?;
     let ws = Workspace::find()?;
-    ws.require_no_framework_stages("hyve build")?;
+    ws.run_stages("build", &[])?;
     let mut cmd = ws.cargo("build");
     select(&mut cmd, &o.packages);
     if !o.debug {
@@ -227,9 +227,12 @@ fn codegen(args: &[String]) -> Result<(), Fail> {
         }
     }
     let ws = Workspace::find()?;
-    ws.require_no_framework_stages("hyve codegen")?;
-    eprintln!("hyve: no code generation stages in this workspace (no framework dependency)");
-    Ok(())
+    if !ws.uses_frameworks() {
+        eprintln!("hyve: no code generation stages in this workspace (no framework dependency)");
+        return Ok(());
+    }
+    let check = args.iter().any(|a| a == "--check");
+    ws.run_stages("codegen", if check { &["--check"] } else { &[] })
 }
 
 fn init(args: &[String]) -> Result<(), Fail> {

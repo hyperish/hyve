@@ -187,29 +187,145 @@ fn codegen_without_frameworks_has_nothing_to_do() {
     assert!(hyve(&d, &["codegen", "--check"]).status.success());
 }
 
-#[test]
-fn framework_workspaces_need_the_stage_calls() {
-    let d = temp(&[
+/// A workspace whose member depends on `orbic` (and `serge`) at the given
+/// versions, through local stand-ins.
+fn framework_workspace(orbic: &str, serge: Option<&str>) -> PathBuf {
+    let serge_dep = serge.map_or(String::new(), |_| "serge = { path = \"serge\" }\n".into());
+    let mut files = vec![
         (
-            "Cargo.toml",
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\norbic = { path = \"orbic\" }\n\n[workspace]\n",
+            "Cargo.toml".to_owned(),
+            format!(
+                "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\norbic = {{ path = \"orbic\" }}\n{serge_dep}\n[workspace]\n"
+            ),
         ),
-        ("src/lib.rs", ""),
+        ("src/lib.rs".to_owned(), String::new()),
         (
-            "orbic/Cargo.toml",
-            "[package]\nname = \"orbic\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+            "orbic/Cargo.toml".to_owned(),
+            format!("[package]\nname = \"orbic\"\nversion = \"{orbic}\"\nedition = \"2024\"\n"),
         ),
-        ("orbic/src/lib.rs", ""),
-    ]);
-    for cmd in ["build", "codegen"] {
-        let o = hyve(&d, &[cmd]);
-        assert_eq!(o.status.code(), Some(3), "{cmd}: {}", stderr(&o));
-        assert!(
-            stderr(&o).contains("uses orbic (calling the hyve-orbic stages)"),
-            "{}",
-            stderr(&o)
-        );
+        ("orbic/src/lib.rs".to_owned(), String::new()),
+    ];
+    if let Some(v) = serge {
+        files.push((
+            "serge/Cargo.toml".to_owned(),
+            format!("[package]\nname = \"serge\"\nversion = \"{v}\"\nedition = \"2024\"\n"),
+        ));
+        files.push(("serge/src/lib.rs".to_owned(), String::new()));
     }
+    temp(
+        &files
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// A stand-in `hyve-<framework>` that reports `version` and `stages` and
+/// logs each stage it runs to `log`.
+#[cfg(unix)]
+fn fake_tool(bin: &Path, framework: &str, version: &str, stages: &[&str], exit: i32) {
+    use std::os::unix::fs::PermissionsExt;
+    let path = bin.join(format!("hyve-{framework}"));
+    let script = format!(
+        "#!/bin/sh\nif [ \"$1\" = stages ]; then printf '%s\\n' {version} {stages}; exit 0; fi\necho \"{framework} $*\" >> \"$HYVE_FAKE_LOG\"\nexit {exit}\n",
+        stages = stages.join(" ")
+    );
+    std::fs::create_dir_all(bin).unwrap();
+    std::fs::write(&path, script).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[cfg(unix)]
+fn hyve_with_tools(dir: &Path, bin: &Path, args: &[&str]) -> (Output, String) {
+    let log = dir.join("stages.log");
+    let _ = std::fs::remove_file(&log);
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let o = Command::new(env!("CARGO_BIN_EXE_hyve"))
+        .args(args)
+        .current_dir(dir)
+        .env("PATH", path)
+        .env("HYVE_FAKE_LOG", &log)
+        .env("CARGO_TARGET_DIR", dir.join("target"))
+        .env("CARGO_NET_OFFLINE", "true")
+        .output()
+        .unwrap();
+    (o, std::fs::read_to_string(&log).unwrap_or_default())
+}
+
+#[cfg(unix)]
+#[test]
+fn codegen_and_build_call_the_framework_stages() {
+    let d = framework_workspace("0.1.0", Some("0.2.0"));
+    let bin = d.join("bin");
+    fake_tool(&bin, "orbic", "0.1.0", &["codegen"], 0);
+    fake_tool(&bin, "serge", "0.2.0", &["build"], 0);
+
+    let (o, log) = hyve_with_tools(&d, &bin, &["codegen"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(
+        log, "orbic codegen\n",
+        "only the stages a tool provides, in order"
+    );
+    let (o, log) = hyve_with_tools(&d, &bin, &["codegen", "--check"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(log, "orbic codegen --check\n");
+    let (o, log) = hyve_with_tools(&d, &bin, &["build", "--debug"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(log, "serge build\n");
     // Tests need no stages.
-    assert!(hyve(&d, &["test"]).status.success());
+    let (o, log) = hyve_with_tools(&d, &bin, &["test"]);
+    assert!(o.status.success() && log.is_empty(), "{}", stderr(&o));
+}
+
+#[cfg(unix)]
+#[test]
+fn stage_failures_and_version_mismatches_fail() {
+    let d = framework_workspace("0.1.0", None);
+    let bin = d.join("bin");
+    fake_tool(&bin, "orbic", "0.1.0", &["codegen"], 7);
+    let (o, _) = hyve_with_tools(&d, &bin, &["codegen", "--check"]);
+    assert_eq!(
+        o.status.code(),
+        Some(7),
+        "the stage's exit code: {}",
+        stderr(&o)
+    );
+
+    fake_tool(&bin, "orbic", "0.0.9", &["codegen"], 0);
+    let (o, log) = hyve_with_tools(&d, &bin, &["codegen"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(log.is_empty(), "nothing ran");
+    let e = stderr(&o);
+    assert!(
+        e.contains("`hyve-orbic` is orbic 0.0.9, but this workspace uses orbic 0.1.0"),
+        "{e}"
+    );
+    assert!(
+        e.contains("cargo install orbic-cli --version =0.1.0"),
+        "{e}"
+    );
+
+    let empty = d.join("empty-bin");
+    std::fs::create_dir_all(&empty).unwrap();
+    let o = Command::new(env!("CARGO_BIN_EXE_hyve"))
+        .arg("codegen")
+        .current_dir(&d)
+        .env("PATH", empty.display().to_string())
+        .env(
+            "CARGO",
+            std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()),
+        )
+        .env("CARGO_NET_OFFLINE", "true")
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        stderr(&o).contains("`hyve-orbic` could not be run"),
+        "{}",
+        stderr(&o)
+    );
 }
