@@ -567,7 +567,11 @@ fn codecs() {
                 timed(n, || hyve_serde::json::to_json(&f1), |s| s.len() as u64)
             }),
             run("serde_json::to_string", move |n| {
-                timed(n, || serde_json::to_string(&f2).unwrap(), |s| s.len() as u64)
+                timed(
+                    n,
+                    || serde_json::to_string(&f2).unwrap(),
+                    |s| s.len() as u64,
+                )
             }),
         ],
     );
@@ -582,7 +586,11 @@ fn codecs() {
                 timed(n, || hyve_serde::json::to_json(&t1), |s| s.len() as u64)
             }),
             run("serde_json::to_string", move |n| {
-                timed(n, || serde_json::to_string(&t2).unwrap(), |s| s.len() as u64)
+                timed(
+                    n,
+                    || serde_json::to_string(&t2).unwrap(),
+                    |s| s.len() as u64,
+                )
             }),
         ],
     );
