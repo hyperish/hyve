@@ -13,8 +13,10 @@
 mod dotenv;
 mod duration;
 mod interpolation;
+mod toml;
 
 pub use dotenv::{DotenvEntry, parse_dotenv};
 pub use duration::parse_duration;
 pub use hyve_diagnostics::{Diagnostic, Span};
 pub use interpolation::{Segment, parse_interpolation};
+pub use toml::{Spanned, TomlTable, TomlValue, parse_toml};

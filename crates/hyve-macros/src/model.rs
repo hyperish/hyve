@@ -196,6 +196,21 @@ pub(crate) fn expand_struct(
 
     let name = s.ident.clone();
     let name_str = name.to_string();
+    // Whether `Default` is implemented is only knowable for a concrete type;
+    // generic models report no default.
+    let default_value = if s.generics.params.is_empty() {
+        let validate = krate.validate();
+        quote! {
+            #[allow(clippy::needless_borrow)]
+            fn default_value() -> ::core::option::Option<Self> {
+                #[allow(unused_imports)]
+                use #validate::__private::{NoDefault as _, ViaDefault as _};
+                (&#validate::__private::DefaultProbe::<Self>::new()).probe_default()
+            }
+        }
+    } else {
+        quote! {}
+    };
     let mut fields = Vec::new();
     let mut errors: Option<syn::Error> = None;
     let mut push_err = |e: syn::Error| match &mut errors {
@@ -313,6 +328,8 @@ pub(crate) fn expand_struct(
     // ----- schema -----
     let field_schemas = fields.iter().map(|f| {
         let (ty, key) = (&f.ty, &f.json);
+        let rust_name = f.ident.to_string();
+        let rust_name = rust_name.strip_prefix("r#").unwrap_or(&rust_name).to_owned();
         let constraints = f.rules.iter().map(|r| {
             let expr = &r.expr;
             match r.kind {
@@ -324,6 +341,7 @@ pub(crate) fn expand_struct(
         });
         quote! {
             #validate::FieldSchema {
+                name: #rust_name,
                 json_name: #key,
                 schema: <#ty as #validate::Schema>::schema(__reg),
                 required: !<#ty as #validate::Schema>::optional(),
@@ -411,6 +429,8 @@ pub(crate) fn expand_struct(
                     #validate::Definition::Object(::std::vec![#(#field_schemas),*])
                 })
             }
+
+            #default_value
         }
 
         impl #iff #serde::Fingerprint for #name #tf #wf {

@@ -79,6 +79,9 @@ pub enum Constraint {
 /// One field of an object definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldSchema {
+    /// Name in Rust (`snake_case`); configuration sources use it
+    /// (`hyve.toml` keys, `--set`, environment variable names).
+    pub name: &'static str,
     /// Name on the wire (`camelCase`).
     pub json_name: &'static str,
     /// Shape.
@@ -211,6 +214,16 @@ pub trait Schema {
     fn optional() -> bool {
         false
     }
+
+    /// The type's default value, when it has one. `#[model]` returns
+    /// `Some(Default::default())` for non-generic models that implement
+    /// `Default`; configuration loading uses it as the lowest layer.
+    fn default_value() -> Option<Self>
+    where
+        Self: Sized,
+    {
+        None
+    }
 }
 
 macro_rules! leaf {
@@ -313,6 +326,7 @@ mod tests {
         fn schema(r: &mut SchemaRegistry) -> SchemaNode {
             r.define::<Node>("Node", |r| {
                 Definition::Object(vec![FieldSchema {
+                    name: "children",
                     json_name: "children",
                     schema: <Vec<Node>>::schema(r),
                     required: true,

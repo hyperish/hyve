@@ -82,6 +82,7 @@ impl Schema for NewProject {
     fn schema(r: &mut SchemaRegistry) -> SchemaNode {
         r.define::<Self>("NewProject", |r| {
             Definition::Object(vec![FieldSchema {
+                name: "title",
                 json_name: "title",
                 schema: <String as Schema>::schema(r),
                 required: !<String as Schema>::optional(),
@@ -152,12 +153,14 @@ impl Schema for Project {
         r.define::<Self>("Project", |r| {
             Definition::Object(vec![
                 FieldSchema {
+                    name: "title",
                     json_name: "title",
                     schema: <String as Schema>::schema(r),
                     required: true,
                     constraints: vec![],
                 },
                 FieldSchema {
+                    name: "owner",
                     json_name: "owner",
                     schema: <String as Schema>::schema(r),
                     required: true,

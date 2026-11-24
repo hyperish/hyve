@@ -18,6 +18,7 @@ test = ["dep:tokio"]
 
 [dependencies]
 hyve-api.workspace = true
+hyve-config.workspace = true
 hyve-core.workspace = true
 hyve-diagnostics.workspace = true
 hyve-macros.workspace = true

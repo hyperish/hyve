@@ -13,6 +13,54 @@
 pub mod rules;
 mod schema;
 
+/// Support for generated code; not a public API.
+#[doc(hidden)]
+pub mod __private {
+    use std::marker::PhantomData;
+
+    /// Autoref specialization on `T: Default`: `(&DefaultProbe::<T>::new()).probe_default()`
+    /// resolves to [`ViaDefault`] when `T: Default` and to [`NoDefault`]
+    /// otherwise. Only valid where `T` is a concrete type.
+    pub struct DefaultProbe<T>(PhantomData<fn() -> T>);
+
+    impl<T> DefaultProbe<T> {
+        /// A probe for `T`.
+        pub fn new() -> Self {
+            DefaultProbe(PhantomData)
+        }
+    }
+
+    impl<T> Default for DefaultProbe<T> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    /// Picked when `T: Default`.
+    pub trait ViaDefault<T> {
+        /// `Some(T::default())`.
+        fn probe_default(&self) -> Option<T>;
+    }
+
+    impl<T: Default> ViaDefault<T> for DefaultProbe<T> {
+        fn probe_default(&self) -> Option<T> {
+            Some(T::default())
+        }
+    }
+
+    /// Picked otherwise.
+    pub trait NoDefault<T> {
+        /// `None`.
+        fn probe_default(&self) -> Option<T>;
+    }
+
+    impl<T> NoDefault<T> for &DefaultProbe<T> {
+        fn probe_default(&self) -> Option<T> {
+            None
+        }
+    }
+}
+
 pub use schema::{
     Constraint, Definition, FieldSchema, Schema, SchemaNode, SchemaRegistry, generic_name, label,
 };

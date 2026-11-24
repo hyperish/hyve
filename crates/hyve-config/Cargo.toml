@@ -1,0 +1,19 @@
+[package]
+name = "hyve-config"
+description = "Startup configuration for the Hyperish family: hyve.toml, .env, environment and --set, decoded into a #[model] and validated"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+hyve-core.workspace = true
+hyve-diagnostics.workspace = true
+hyve-parser.workspace = true
+hyve-serde.workspace = true
+hyve-validate.workspace = true
+
+[lints]
+workspace = true

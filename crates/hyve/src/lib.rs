@@ -26,6 +26,7 @@
 //! | [`serde`] | `hyve-serde` | binary (fast rail) and JSON (standard rail) codecs, fingerprints |
 //! | [`validate`] | `hyve-validate` | `Valid<T>`, rules, schema metadata |
 //! | [`api`] | `hyve-api` | server function contracts, transports, `Page`, `Path`, `Query` |
+//! | [`config`] | `hyve-config` | startup configuration (`hyve.toml`, `.env`, environment, `--set`) |
 //! | [`parser`], [`diagnostics`] | `hyve-parser`, `hyve-diagnostics` | shared grammars and diagnostics |
 
 extern crate self as hyve;
@@ -34,6 +35,7 @@ pub use hyve_core::*;
 pub use hyve_macros::{model, server, server_ctx, test, validate};
 
 pub use hyve_api as api;
+pub use hyve_config as config;
 pub use hyve_diagnostics as diagnostics;
 pub use hyve_parser as parser;
 pub use hyve_serde as serde;
@@ -46,6 +48,7 @@ pub use hyve_validate as validate;
 /// `#[test]`); write it with its path.
 pub mod prelude {
     pub use hyve_api::{CursorParams, Page, Path, Query};
+    pub use hyve_config as config;
     pub use hyve_core::{
         CancellationToken, Ctx, ErrorKind, HyveError, HyveResult, Id, RequestId, Scope, Timestamp,
         TraceId, Ulid, Value,

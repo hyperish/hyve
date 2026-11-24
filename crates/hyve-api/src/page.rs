@@ -137,18 +137,21 @@ impl<T: Schema + 'static> Schema for Page<T> {
         r.define::<Self>(name, |r| {
             Definition::Object(vec![
                 FieldSchema {
+                    name: "items",
                     json_name: "items",
                     schema: <Vec<T> as Schema>::schema(r),
                     required: !<Vec<T> as Schema>::optional(),
                     constraints: vec![],
                 },
                 FieldSchema {
+                    name: "next_cursor",
                     json_name: "nextCursor",
                     schema: <Option<String> as Schema>::schema(r),
                     required: !<Option<String> as Schema>::optional(),
                     constraints: vec![],
                 },
                 FieldSchema {
+                    name: "has_more",
                     json_name: "hasMore",
                     schema: <bool as Schema>::schema(r),
                     required: !<bool as Schema>::optional(),
@@ -235,12 +238,14 @@ impl Schema for CursorParams {
         r.define::<Self>("CursorParams", |r| {
             Definition::Object(vec![
                 FieldSchema {
+                    name: "after",
                     json_name: "after",
                     schema: <Option<String> as Schema>::schema(r),
                     required: !<Option<String> as Schema>::optional(),
                     constraints: vec![],
                 },
                 FieldSchema {
+                    name: "limit",
                     json_name: "limit",
                     schema: <Option<u32> as Schema>::schema(r),
                     required: !<Option<u32> as Schema>::optional(),

@@ -161,6 +161,7 @@ name = "hyve"
 version = "0.1.0-alpha.0"
 dependencies = [
  "hyve-api",
+ "hyve-config",
  "hyve-core",
  "hyve-diagnostics",
  "hyve-macros",
@@ -176,6 +177,17 @@ name = "hyve-api"
 version = "0.1.0-alpha.0"
 dependencies = [
  "hyve-core",
+ "hyve-serde",
+ "hyve-validate",
+]
+
+[[package]]
+name = "hyve-config"
+version = "0.1.0-alpha.0"
+dependencies = [
+ "hyve-core",
+ "hyve-diagnostics",
+ "hyve-parser",
  "hyve-serde",
  "hyve-validate",
 ]

@@ -2,6 +2,7 @@
 members = [
     "crates/hyve",
     "crates/hyve-api",
+    "crates/hyve-config",
     "crates/hyve-core",
     "crates/hyve-diagnostics",
     "crates/hyve-macros",
@@ -25,6 +26,7 @@ authors = ["Hyperish Contributors"]
 # Internal crates: path + exact version (hyperish/docs 05-development-rules.md §5).
 hyve = { path = "crates/hyve", version = "=0.1.0-alpha.0" }
 hyve-api = { path = "crates/hyve-api", version = "=0.1.0-alpha.0" }
+hyve-config = { path = "crates/hyve-config", version = "=0.1.0-alpha.0" }
 hyve-core = { path = "crates/hyve-core", version = "=0.1.0-alpha.0" }
 hyve-diagnostics = { path = "crates/hyve-diagnostics", version = "=0.1.0-alpha.0" }
 hyve-macros = { path = "crates/hyve-macros", version = "=0.1.0-alpha.0" }
