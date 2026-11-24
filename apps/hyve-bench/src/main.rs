@@ -141,11 +141,11 @@ mod hy {
         })
     }
 
-    pub fn fan_out(n: u64) -> (Duration, Check) {
+    pub fn fan_out(effects: u64, n: u64) -> (Duration, Check) {
         owned(|| {
             let s = local_signal(0u64);
             let runs = Rc::new(Cell::new(0u64));
-            for _ in 0..1000 {
+            for _ in 0..effects {
                 let r = runs.clone();
                 effect(move || {
                     black_box(s.get());
@@ -263,12 +263,12 @@ macro_rules! rg {
                 })
             }
 
-            pub fn fan_out(n: u64) -> (Duration, Check) {
+            pub fn fan_out(effects: u64, n: u64) -> (Duration, Check) {
                 owned(|| {
                     let s = $new(0u64);
                     let runs = Arc::new(AtomicU64::new(0));
-                    let mut keep = Vec::with_capacity(1000);
-                    for _ in 0..1000 {
+                    let mut keep = Vec::with_capacity(effects as usize);
+                    for _ in 0..effects {
                         let r = runs.clone();
                         keep.push(ImmediateEffect::new_isomorphic(move || {
                             black_box(s.get());
@@ -648,16 +648,25 @@ fn main() {
             run("reactive_graph ImmediateEffect (Local)", rg_local::effect_1),
         ],
     );
-    scenario(
-        "1 signal → 1000 effects",
-        1_000,
-        "set",
-        &[
-            run("hyve-state effect", hy::fan_out),
-            run("reactive_graph ImmediateEffect (Sync)", rg_sync::fan_out),
-            run("reactive_graph ImmediateEffect (Local)", rg_local::fan_out),
-        ],
-    );
+    for (title, effects, n) in [
+        ("1 signal → 100 effects", 100u64, 10_000u64),
+        ("1 signal → 1000 effects", 1000, 1_000),
+    ] {
+        scenario(
+            title,
+            n,
+            "set",
+            &[
+                run("hyve-state effect", move |n| hy::fan_out(effects, n)),
+                run("reactive_graph ImmediateEffect (Sync)", move |n| {
+                    rg_sync::fan_out(effects, n)
+                }),
+                run("reactive_graph ImmediateEffect (Local)", move |n| {
+                    rg_local::fan_out(effects, n)
+                }),
+            ],
+        );
+    }
     // How a set travels down a chain of memos, at three depths.
     for (title, depth, n) in [
         (

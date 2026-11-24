@@ -100,7 +100,7 @@ hyve/
 |---|---|---|
 | `hyve-serde` | `rkyv` `=0.8.18` 고정 의존(`default-features = false`, `std`·`bytecheck`·포맷 제어 조합) | 개조 방향(`#[model]` 직결, 검증된 제로카피 접근)이 공개 API로 됨. derive가 참조하는 경로를 `hyve-serde` 재수출로 돌리고 워크스페이스의 `unsafe_code = "deny"` 아래에서 통과하는 것을 확인함 |
 | `hyve-serde` (JSON) | `serde_json` 대신 자체 코덱 | §2.3의 JSON 규칙(손실 없는 수 표현, 입력 한도, `camelCase`)은 타입 단위로 두 레일에 똑같이 적용돼야 함. `serde` derive와 `serde_json`으로는 수 처리를 모든 경로에서 가로채는 래퍼가 필요하므로, `#[model]`이 인코더·디코더를 직접 생성하는 한 단계 경로가 더 적은 변환과 의존으로 끝남. 확정된 "외부 어댑터 `serde_json`"을 바꾼 것 |
-| `hyve-state` | `reactive_graph`를 레퍼런스로 삼은 자체 구현 | 개조 방향이 런타임과 아레나를 통째로 바꾸는 것이라 원본을 감쌀 수 없음. 원본은 프리릴리스(`0.3.0-rc1`)이고 `rust-version`이 `1.88`이며 비동기 런타임 계열 의존(`any_spawner`, `futures`, `async-lock`)과 `slotmap`(`Zlib`)을 끌어옴(2026-11-24 `cargo tree` 확인) |
+| `hyve-state` | `reactive_graph`를 레퍼런스로 삼은 자체 구현 | 개조 방향이 런타임과 아레나를 통째로 바꾸는 것이라 원본을 감쌀 수 없음. 원본은 프리릴리스(`0.3.0-rc1`)이고 `rust-version`이 `1.88`이며 비동기 런타임 계열 의존(`any_spawner`, `futures`, `async-lock`)과 `slotmap`(`Zlib`)을 끌어옴(2026-11-24 `cargo tree` 확인). 표의 SoA 분리(값 배열·구독자 비트셋)는 하지 않음(확정의 실행 방식을 바꿈, 2026-11-25): 원본 대비 측정에서 느린 시나리오가 없고, 드러난 병목은 값 배치가 아니라 재실행의 간선·범위 정리였으므로 그것을 고침(`05-implementation-plan.md` 원본 대비 측정) |
 | `hyve-core` | `Ulid`와 `SharedRingBuf<T>`는 자체 구현, `bytemuck` `=1.25.2` 고정 의존 | `ulid` 크레이트는 `rand`를 끌어오고 규격이 작음. `rtrb`·`crossbeam-queue`는 소비형 큐라서, 최신 샘플을 덮어쓰고 찢어짐 없이 스냅샷하는 `SharedRingBuf`의 의미와 다름. 두 크레이트는 레퍼런스로만 씀 |
 | `hyve-parser`, `hyve-diagnostics` | `winnow` `=1.0.5`, `ariadne` `=0.6.0` 고정 의존 | 개조 방향이 공개 API로 됨 |
 

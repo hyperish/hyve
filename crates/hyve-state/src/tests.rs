@@ -363,3 +363,53 @@ fn a_rerun_empties_its_scope_and_ends_the_previous_runs_handle() {
     assert!(!scopes[0].is_alive() && !scopes[1].is_alive());
     assert!(scopes[2].is_alive());
 }
+
+#[test]
+fn observers_of_a_source_keep_their_subscription_order() {
+    // E1 and E2 read `s`; E1 also reads `t`. After E1 re-runs through `t`,
+    // a write to `s` still runs E1 first.
+    let s = signal(0);
+    let t = signal(0);
+    let order = log();
+    let o1 = order.clone();
+    effect(move || {
+        s();
+        t();
+        o1.borrow_mut().push(1);
+    });
+    let o2 = order.clone();
+    effect(move || {
+        s();
+        o2.borrow_mut().push(2);
+    });
+    t.set(1);
+    order.borrow_mut().clear();
+    s.set(1);
+    assert_eq!(*order.borrow(), vec![1, 2]);
+}
+
+#[test]
+fn sibling_scopes_keep_their_order_across_reruns() {
+    // Disposing the parent runs its effects' cleanups in creation order,
+    // also after the first effect re-ran.
+    let order = log();
+    let parent = Owner::new();
+    let t = signal(0);
+    parent.with(|| {
+        let o1 = order.clone();
+        effect(move || {
+            t();
+            let o = o1.clone();
+            on_cleanup(move || o.borrow_mut().push(1));
+        });
+        let o2 = order.clone();
+        effect(move || {
+            let o = o2.clone();
+            on_cleanup(move || o.borrow_mut().push(2));
+        });
+    });
+    t.set(1);
+    order.borrow_mut().clear();
+    parent.dispose();
+    assert_eq!(*order.borrow(), vec![1, 2]);
+}
