@@ -3,6 +3,7 @@ members = [
     "crates/hyve-core",
     "crates/hyve-diagnostics",
     "crates/hyve-parser",
+    "crates/hyve-serde",
 ]
 resolver = "3"
 
@@ -19,9 +20,12 @@ authors = ["Hyperish Contributors"]
 hyve-core = { path = "crates/hyve-core", version = "=0.1.0-alpha.0" }
 hyve-diagnostics = { path = "crates/hyve-diagnostics", version = "=0.1.0-alpha.0" }
 hyve-parser = { path = "crates/hyve-parser", version = "=0.1.0-alpha.0" }
+hyve-serde = { path = "crates/hyve-serde", version = "=0.1.0-alpha.0" }
 
 # Pinned third-party crates (docs/02-architecture.md §3).
 ariadne = "=0.6.0"
+# Format control fixed family-wide (docs/02-architecture.md §2.3).
+rkyv = { version = "=0.8.18", default-features = false, features = ["std", "bytecheck", "little_endian", "aligned", "pointer_width_32"] }
 bytemuck = { version = "=1.25.2", features = ["derive", "min_const_generics"] }
 getrandom = "=0.4.3"
 js-sys = "=0.3.107"

@@ -14,7 +14,19 @@ const MAX_MICROS: i64 = 253_402_300_800 * MICROS_PER_SEC - 1;
 
 /// A UTC instant with microsecond precision, limited to years 0000–9999 so it
 /// always has an RFC 3339 form.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[rkyv(derive(Debug, PartialEq, Eq))]
 pub struct Timestamp(i64);
 
 impl Timestamp {
@@ -60,6 +72,12 @@ impl Timestamp {
     /// Adds a signed number of microseconds; `None` if the result leaves the range.
     pub fn checked_add_micros(self, micros: i64) -> Option<Self> {
         self.0.checked_add(micros).and_then(Self::from_unix_micros)
+    }
+}
+
+impl From<&ArchivedTimestamp> for Timestamp {
+    fn from(a: &ArchivedTimestamp) -> Self {
+        Timestamp(a.0.to_native())
     }
 }
 

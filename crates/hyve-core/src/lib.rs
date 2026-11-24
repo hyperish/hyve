@@ -29,11 +29,11 @@ mod value;
 pub use cancel::{CancellationToken, Cancelled};
 pub use correlation::{InvalidRequestId, RequestId, TraceId};
 pub use error::{ErrorKind, HyveError, HyveResult};
-pub use id::{Id, ParseUlidError, Ulid};
+pub use id::{ArchivedId, ArchivedUlid, Id, ParseUlidError, Ulid};
 pub use ring::SharedRingBuf;
 pub use scope::{Ctx, Scope, Scoped};
-pub use time::{ParseTimestampError, Timestamp};
-pub use value::Value;
+pub use time::{ArchivedTimestamp, ParseTimestampError, Timestamp};
+pub use value::{ArchivedValue, Value};
 
 /// Re-export used by `SharedRingBuf` element types (`#[derive(Pod, Zeroable)]`).
 pub use bytemuck;

@@ -24,7 +24,19 @@ const MAX_MILLIS: u64 = (1u64 << 48) - 1;
 static LAST: Mutex<Option<(u64, u128)>> = Mutex::new(None);
 
 /// A 128-bit ULID.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[rkyv(derive(Debug, PartialEq, Eq))]
 pub struct Ulid(u128);
 
 impl Ulid {
@@ -158,6 +170,7 @@ fn decode_char(b: u8) -> Option<u8> {
 
 /// A [`Ulid`] tagged with the type it identifies, so `Id<User>` and
 /// `Id<Project>` cannot be mixed up.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Id<T: ?Sized> {
     ulid: Ulid,
     _marker: PhantomData<fn() -> T>,
@@ -241,6 +254,18 @@ impl<T: ?Sized> FromStr for Id<T> {
     type Err = ParseUlidError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.parse().map(Self::from_ulid)
+    }
+}
+
+impl From<&ArchivedUlid> for Ulid {
+    fn from(a: &ArchivedUlid) -> Self {
+        Ulid(a.0.to_native())
+    }
+}
+
+impl<T: ?Sized> From<&ArchivedId<T>> for Id<T> {
+    fn from(a: &ArchivedId<T>) -> Self {
+        Id::from_ulid(Ulid::from(&a.ulid))
     }
 }
 

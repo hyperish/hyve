@@ -4,7 +4,13 @@
 ///
 /// Used for [`HyveError`](crate::HyveError) details so both the binary and the
 /// JSON rail can carry them without loss. Maps keep insertion order.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[rkyv(serialize_bounds(
+    __S: rkyv::ser::Writer + rkyv::ser::Allocator,
+    __S::Error: rkyv::rancor::Source,
+))]
+#[rkyv(deserialize_bounds(__D::Error: rkyv::rancor::Source))]
+#[rkyv(bytecheck(bounds(__C: rkyv::validation::ArchiveContext, __C::Error: rkyv::rancor::Source)))]
 pub enum Value {
     /// Absence of a value.
     #[default]
@@ -20,9 +26,9 @@ pub enum Value {
     /// UTF-8 text.
     String(String),
     /// Ordered list.
-    List(Vec<Value>),
+    List(#[rkyv(omit_bounds)] Vec<Value>),
     /// Ordered map with string keys.
-    Map(Vec<(String, Value)>),
+    Map(#[rkyv(omit_bounds)] Vec<(String, Value)>),
 }
 
 impl Value {

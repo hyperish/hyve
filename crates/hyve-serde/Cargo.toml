@@ -1,0 +1,19 @@
+[package]
+name = "hyve-serde"
+description = "Binary (rkyv) and lossless JSON codecs with schema fingerprints for the Hyperish family"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+hyve-core.workspace = true
+rkyv.workspace = true
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true
