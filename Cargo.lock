@@ -186,6 +186,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyve-state"
+version = "0.1.0-alpha.0"
+dependencies = [
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "hyve-validate"
 version = "0.1.0-alpha.0"
 dependencies = [

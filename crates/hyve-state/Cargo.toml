@@ -1,0 +1,17 @@
+[package]
+name = "hyve-state"
+description = "Platform-neutral reactive graph (signals, memos, effects, owner scopes) for the Hyperish family"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true
