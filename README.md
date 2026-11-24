@@ -11,7 +11,7 @@ use hyve::prelude::*;
 // 모델 하나만 선언하면:
 // 1) 고성능 직렬화/역직렬화 (hyve-serde)
 // 2) 구조적 데이터 검증 (hyve-validate)
-// 3) 범용 스키마 메타데이터 및 규격 인터페이스 (hyve-api)
+// 3) 범용 스키마 메타데이터(hyve-validate)와 규격 인터페이스(hyve-api)
 // 가 한 번에 도출됩니다.
 #[model]
 pub struct SceneConfig {
@@ -41,3 +41,4 @@ pub struct SceneConfig {
 | 02 | [아키텍처와 크레이트 구조](docs/02-architecture.md) | `apps/`, `crates/` 모노레포 구성, 상태성·직렬화·파서·규격 인터페이스 코어 |
 | 03 | [파이프라인과 호환 어댑터](docs/03-adapters-and-pipeline.md) | `orbic`·`serge` 타깃 연결 파이프라인, 규격 통합 인터페이스, 외부 호환 어댑터 |
 | 04 | [열린 결정](docs/04-open-questions.md) | `hyve` 레포의 미정 사항 목록과 결정 기록 |
+| 05 | [구현 계획](docs/05-implementation-plan.md) | Phase 1 작업 순서와 완료 기준 |
