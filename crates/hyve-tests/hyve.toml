@@ -1,0 +1,10 @@
+# Fixture for tests/mvp.rs: `config::load::<EngineConfig>()` finds this file
+# because `cargo test` runs in this crate's directory.
+
+[hyve]
+# Keeps a developer's own `APP_*` variables out of the tests.
+env_prefix = "HYVE_TESTS"
+
+[app]
+app_name = "hyve-tests"
+max_fps = 144

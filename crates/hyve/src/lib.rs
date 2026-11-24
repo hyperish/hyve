@@ -19,6 +19,26 @@
 //! assert!(Valid::new(scene).is_ok());
 //! ```
 //!
+//! Startup configuration is a model too ([`config`]):
+//!
+//! ```no_run
+//! use hyve::prelude::*;
+//!
+//! #[model]
+//! pub struct EngineConfig {
+//!     #[validate(range = 30..=240)]
+//!     pub max_fps: u32,
+//! }
+//!
+//! fn main() -> HyveResult<()> {
+//!     // `[app] max_fps = 144` in hyve.toml, `APP_MAX_FPS=144`, or `--set max_fps=144`.
+//!     let cfg = config::load::<EngineConfig>()?;
+//!     let fps = signal(cfg.max_fps);
+//!     fps.set(120);
+//!     Ok(())
+//! }
+//! ```
+//!
 //! | Module | Crate | What |
 //! |---|---|---|
 //! | crate root | `hyve-core` | errors, IDs, time, correlation, cancellation, scopes, ring buffer |
