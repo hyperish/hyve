@@ -1,0 +1,23 @@
+# Measurements of hyve's own cores against the originals they were made
+# from (docs/05-implementation-plan.md, 포크 기록). Not published and not a
+# member of the hyve workspace: the baselines stay out of hyve's lockfile
+# and gates. Run: `cargo run --release` in this directory.
+[package]
+name = "hyve-bench"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+hyve = { path = "../../crates/hyve" }
+hyve-state = { path = "../../crates/hyve-state" }
+hyve-serde = { path = "../../crates/hyve-serde" }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.154"
+# The fork record's reference version.
+reactive_graph = "=0.3.0-rc1"
+# No features of its own: the archive format stays the one hyve-serde builds.
+rkyv = { version = "=0.8.18", default-features = false }
+
+[workspace]
