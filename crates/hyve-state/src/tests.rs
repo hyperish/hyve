@@ -266,3 +266,75 @@ fn creating_inside_a_disposed_scope_panics() {
         signal(1);
     });
 }
+
+#[test]
+fn reruns_keep_the_edges_they_read_again_and_drop_the_rest() {
+    let flag = signal(true);
+    let a = signal(0);
+    let b = signal(0);
+    let runs = Rc::new(Cell::new(0));
+    let r = runs.clone();
+    effect(move || {
+        r.set(r.get() + 1);
+        if flag() {
+            a();
+        } else {
+            b();
+        }
+    });
+    a.set(1);
+    b.set(1);
+    assert_eq!(runs.get(), 2, "b is not read yet");
+    flag.set(false);
+    assert_eq!(runs.get(), 3);
+    a.set(2);
+    assert_eq!(runs.get(), 3, "the edge to a was dropped");
+    b.set(2);
+    assert_eq!(runs.get(), 4);
+    let observers = |id| Runtime::with(|rt| rt.observers_of(id));
+    assert!(observers(a.id).is_empty());
+    assert_eq!(observers(b.id).len(), 1);
+    assert_eq!(observers(flag.id).len(), 1);
+}
+
+#[test]
+fn a_write_to_a_source_not_read_again_yet_does_not_rerun_the_writer() {
+    // As if the run had started without its previous edges.
+    let t = signal(0);
+    let a = signal(0);
+    let runs = Rc::new(Cell::new(0));
+    let r = runs.clone();
+    effect(move || {
+        r.set(r.get() + 1);
+        if t() > 0 {
+            a.set(t());
+        }
+        a();
+    });
+    t.set(1);
+    assert_eq!(runs.get(), 2, "writing a before reading it again");
+    a.set(5);
+    assert_eq!(runs.get(), 3, "a is read again");
+}
+
+#[test]
+fn fan_out_reruns_leave_the_edges_in_place() {
+    let s = signal(0);
+    let runs = Rc::new(Cell::new(0));
+    for _ in 0..3 {
+        let r = runs.clone();
+        effect(move || {
+            s();
+            r.set(r.get() + 1);
+        });
+    }
+    let before = Runtime::with(|rt| rt.observers_of(s.id));
+    s.set(1);
+    s.set(2);
+    assert_eq!(runs.get(), 9);
+    assert_eq!(
+        Runtime::with(|rt| rt.observers_of(s.id)),
+        before,
+        "the same edges in the same order"
+    );
+}

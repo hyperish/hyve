@@ -88,6 +88,12 @@ struct Node {
     /// Recomputes a memo (returns whether the value changed) or runs an effect.
     compute: Option<Compute>,
     sources: Vec<u32>,
+    /// While the node runs: sources of its previous run it has not read
+    /// again yet. Their edges stay in place (so a source read again keeps
+    /// its edge, and a write's cost does not grow with the number of other
+    /// observers) but do not count until read again (`live`); the run
+    /// drops the rest when it ends.
+    stale: Vec<u32>,
     observers: Vec<u32>,
     owner: u32,
     /// Owner of nodes created while this memo/effect last ran.
@@ -234,6 +240,7 @@ impl Runtime {
             value,
             compute,
             sources: Vec::new(),
+            stale: Vec::new(),
             observers: Vec::new(),
             owner,
             run_owner: None,
@@ -280,7 +287,10 @@ impl Runtime {
             if let Some(obs) = st.observer {
                 if obs != index && !st.nodes[obs as usize].sources.contains(&index) {
                     st.nodes[obs as usize].sources.push(index);
-                    st.nodes[index as usize].observers.push(obs);
+                    // An edge kept from the previous run is already there.
+                    if !st.nodes[obs as usize].stale.contains(&index) {
+                        st.nodes[index as usize].observers.push(obs);
+                    }
                 }
             }
         }
@@ -288,6 +298,13 @@ impl Runtime {
             .value
             .clone()
             .expect("hyve-state: node without a value")
+    }
+
+    /// The observers of a node, in order (tests of edge handling).
+    #[cfg(test)]
+    pub(crate) fn observers_of(&self, id: NodeId) -> Vec<u32> {
+        let index = self.check_node(id);
+        self.state.borrow().nodes[index as usize].observers.clone()
     }
 
     // ----- writes -----
@@ -299,7 +316,9 @@ impl Runtime {
             let mut st = self.st();
             let observers = st.nodes[index as usize].observers.clone();
             for o in observers {
-                mark(&mut st, o, NodeState::Dirty);
+                if live(&st, index, o) {
+                    mark(&mut st, o, NodeState::Dirty);
+                }
             }
         }
         self.flush();
@@ -425,11 +444,11 @@ impl Runtime {
                 .compute
                 .clone()
                 .expect("hyve-state: computed node without a function");
-            // Drop old dependency edges; the run re-registers what it reads.
-            let sources = std::mem::take(&mut node.sources);
-            for s in sources {
-                st.nodes[s as usize].observers.retain(|&o| o != index);
-            }
+            // The previous run's edges become stale: the run re-registers
+            // what it reads (keeping those edges), the rest go afterwards.
+            // (A run that panicked left its stale edges; they merge in.)
+            let mut previous = std::mem::take(&mut node.sources);
+            node.stale.append(&mut previous);
             let saved = Saved {
                 observer: st.observer.replace(index),
                 owner: std::mem::replace(&mut st.owner, run_owner),
@@ -442,11 +461,21 @@ impl Runtime {
             compute()
         };
 
-        if changed {
-            let mut st = self.st();
-            if st.node_alive(index, generation) && st.nodes[index as usize].kind == Kind::Memo {
-                let observers = st.nodes[index as usize].observers.clone();
-                for o in observers {
+        let mut st = self.st();
+        if !st.node_alive(index, generation) {
+            return;
+        }
+        // Drop the edges to sources this run did not read.
+        let stale = std::mem::take(&mut st.nodes[index as usize].stale);
+        for s in stale {
+            if !st.nodes[index as usize].sources.contains(&s) {
+                st.nodes[s as usize].observers.retain(|&o| o != index);
+            }
+        }
+        if changed && st.nodes[index as usize].kind == Kind::Memo {
+            let observers = st.nodes[index as usize].observers.clone();
+            for o in observers {
+                if live(&st, index, o) {
                     mark(&mut st, o, NodeState::Dirty);
                 }
             }
@@ -618,9 +647,19 @@ fn mark(st: &mut State, index: u32, to: NodeState) {
         // A node that was already `Check` has already marked its observers.
         let observers = st.nodes[index as usize].observers.clone();
         for o in observers {
-            mark(st, o, NodeState::Check);
+            if live(st, index, o) {
+                mark(st, o, NodeState::Check);
+            }
         }
     }
+}
+
+/// Whether `o` observes `s` now. During `o`'s run, an edge kept from its
+/// previous run counts only once the run has read `s` again, as if the
+/// run had started without it.
+fn live(st: &State, s: u32, o: u32) -> bool {
+    let n = &st.nodes[o as usize];
+    n.stale.is_empty() || !n.stale.contains(&s) || n.sources.contains(&s)
 }
 
 fn new_owner_slot(st: &mut State, parent: u32) -> OwnerRef {
@@ -693,13 +732,16 @@ fn dispose_node(st: &mut State, index: u32, released: &mut Released) {
     if let Some(c) = node.compute.take() {
         released.garbage.push(Box::new(c));
     }
-    let sources = std::mem::take(&mut node.sources);
+    let mut sources = std::mem::take(&mut node.sources);
+    sources.append(&mut node.stale);
     let observers = std::mem::take(&mut node.observers);
     for s in sources {
         st.nodes[s as usize].observers.retain(|&o| o != index);
     }
     for o in observers {
-        st.nodes[o as usize].sources.retain(|&s| s != index);
+        let n = &mut st.nodes[o as usize];
+        n.sources.retain(|&s| s != index);
+        n.stale.retain(|&s| s != index);
     }
     st.pending.retain(|&p| p != index);
     st.free_nodes.push(index);
