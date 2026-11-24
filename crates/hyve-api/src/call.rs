@@ -30,10 +30,35 @@ pub trait ServerFn: Sized + 'static {
     fn descriptor() -> &'static ServerFnDescriptor;
 }
 
+/// A value a handler takes from its scope as `Ctx<T>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ContextNeed {
+    /// `TypeId` of `T`.
+    pub type_id: std::any::TypeId,
+    /// `std::any::type_name` of `T`, for messages.
+    pub type_name: &'static str,
+}
+
+impl ContextNeed {
+    /// The need for `Ctx<T>`.
+    pub fn of<T: 'static>() -> Self {
+        ContextNeed {
+            type_id: std::any::TypeId::of::<T>(),
+            type_name: std::any::type_name::<T>(),
+        }
+    }
+}
+
 /// The handler body of a `#[server]` function. Generated only in builds with
 /// the declaring crate's `server` feature, and called only by the request
 /// pipeline `orbic` builds from `.handle(...)`, so guards always run.
 pub trait ServerHandler: ServerFn {
+    /// The `#[server_ctx]` values the body takes from the request scope, so a
+    /// pipeline can check at assembly that something provides them.
+    fn context() -> Vec<ContextNeed> {
+        Vec::new()
+    }
+
     /// Runs the body for `request`. `#[server_ctx]` arguments are taken from
     /// `scope` (the request scope); `Valid<T>` arguments are validated first.
     fn handle(

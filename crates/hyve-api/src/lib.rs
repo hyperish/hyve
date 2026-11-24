@@ -27,7 +27,7 @@ mod extract;
 mod page;
 mod transport;
 
-pub use call::{ServerCall, ServerFn, ServerHandler, StubFn, Wire};
+pub use call::{ContextNeed, ServerCall, ServerFn, ServerHandler, StubFn, Wire};
 pub use descriptor::{Method, ServerFnDescriptor, server_fn_fingerprint};
 pub use error_wire::{ErrorBody, ErrorWire, WireKind};
 pub use extract::{Path, Query};

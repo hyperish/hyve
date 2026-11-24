@@ -375,6 +375,13 @@ pub(crate) fn expand(args: ServerArgs, f: ItemFn) -> syn::Result<TokenStream> {
     let body_params = parsed.iter().map(|a| &a.body);
     let ret = &sig.output;
     let block = &f.block;
+    let ctx_needs: Vec<&Type> = parsed
+        .iter()
+        .filter_map(|a| match &a.kind {
+            ArgKind::Ctx(inner) => Some(inner),
+            _ => None,
+        })
+        .collect();
     let ctx_lets = parsed.iter().filter_map(|a| match &a.kind {
         ArgKind::Ctx(inner) => {
             let ident = &a.ident;
@@ -436,6 +443,10 @@ pub(crate) fn expand(args: ServerArgs, f: ItemFn) -> syn::Result<TokenStream> {
                 async fn __hyve_body(#(#body_params),*) #ret #block
 
                 impl #api::ServerHandler for #marker {
+                    fn context() -> ::std::vec::Vec<#api::ContextNeed> {
+                        ::std::vec![#(#api::ContextNeed::of::<#ctx_needs>()),*]
+                    }
+
                     fn handle(
                         __scope: #core::Scope,
                         __request: #request_ty,

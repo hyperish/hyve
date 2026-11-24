@@ -219,6 +219,16 @@ mod with_server_feature {
     }
 
     #[test]
+    fn handlers_report_their_context_needs() {
+        use hyve::api::ContextNeed;
+        assert_eq!(
+            __hyve_server_create_project::context(),
+            [ContextNeed::of::<Db>()]
+        );
+        assert!(__hyve_server_get_project::context().is_empty());
+    }
+
+    #[test]
     fn handlers_answer_the_same_on_both_rails() {
         let (fast, standard) = both(|| {
             create_project(CreateProject {
