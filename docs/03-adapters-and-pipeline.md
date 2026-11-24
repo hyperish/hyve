@@ -81,6 +81,11 @@
   - 재시도 가능 여부: `Retry-After` 헤더가 있으면 참.
 - 성공 응답은 `200`이면 `data`를 응답 모델로 읽고, `204`면 값 없는 성공입니다. 목록 응답(`Page<T>`)은 `data`의 항목과 `page`의 커서를 합쳐 읽습니다. 봉투를 쓰고 읽는 규칙은 `hyve-serde`의 `Json::encode_data`/`decode_data`(`to_json_data`/`from_json_data`) 하나이고 `Page<T>`가 이를 재정의하므로, 서버 어댑터와 전송은 봉투를 따로 구현하지 않습니다. 전송은 성공 본문 전체를 스텁에 넘깁니다(제안, 2026-11-24).
 
+### 3.4.1 공유 구현 (제안, 2026-11-25)
+
+- 호출을 HTTP 요청으로 바꾸는 규칙(§3.3의 헤더·본문, §3.4의 메서드·경로 자리표시자·쿼리 문자열)과 응답을 결과로 되돌리는 규칙(상태 코드별 오류 종류, `Retry-After`로 재시도 가능 여부, `204`, 봉투)은 `hyve-api`의 `http` 모듈(`encode`, `decode`, `wants_standard_rail`)이 I/O 없는 함수로 가집니다. 원격 전송(`serge-adapter-client`)과 테스트 클라이언트(`orbic`의 `TestClient`)는 이를 함께 써서 서로 어긋나지 않고, 보내는 일과 자격 증명은 각 전송이 맡습니다.
+- 경로·쿼리의 텍스트 파라미터와 모델 사이의 변환(`parse_query`, `from_params`, `percent_encode`, 인자의 JSON 이름)은 `hyve-api`의 `params` 모듈이 가지며, `orbic`의 `Path<T>`·`Query<T>` 추출과 `serge`의 라우트 파라미터가 함께 씁니다.
+
 ### 3.5 자격 증명
 
 스텁은 자격 증명을 다루지 않습니다. 쿠키, `X-CSRF-Token`, `Bearer` 토큰을 요청에 붙이는 것은 전송 구현의 일입니다(`serge/docs/03-adapters-and-pipeline.md` §2).

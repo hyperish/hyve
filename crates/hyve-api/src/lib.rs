@@ -12,8 +12,10 @@
 //!   builds and reachable only through `orbic`'s `.handle(...)` registration.
 //! - [`Transport`]: the typed-call interface implemented by
 //!   `serge-adapter-client` (remote) and `orbic` (in-process, `TestClient`).
-//!   Rails, HTTP mapping, fallback and envelopes are the implementation's job;
-//!   nothing in this crate knows HTTP.
+//!   Rails, fallback and sending are the implementation's job; the mapping of
+//!   a call to an HTTP request and of a response back to a reply is shared
+//!   in [`http`] (pure functions, no I/O), and text parameters to and from
+//!   models in [`params`].
 //! - Shared request/response shapes: [`Path`], [`Query`], [`Page`],
 //!   [`CursorParams`], and the wire form of errors ([`ErrorWire`],
 //!   [`ErrorBody`]).
@@ -24,7 +26,9 @@ mod call;
 mod descriptor;
 mod error_wire;
 mod extract;
+pub mod http;
 mod page;
+pub mod params;
 mod transport;
 
 pub use call::{ContextNeed, ServerCall, ServerFn, ServerHandler, StubFn, Wire};
