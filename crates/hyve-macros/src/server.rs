@@ -297,6 +297,7 @@ pub(crate) fn expand(args: ServerArgs, f: ItemFn) -> syn::Result<TokenStream> {
     let name_str = name.to_string();
     let vis = &f.vis;
     let marker = format_ident!("__hyve_server_{}", name);
+    let sig_types: Vec<&Type> = wire.iter().map(|a| &a.ty).collect();
     let path = &args.path;
     let method = format_ident!("{}", pascal_case(&args.method.to_string().to_lowercase()));
     let arg_names: Vec<String> = wire.iter().map(|a| a.ident.to_string()).collect();
@@ -418,6 +419,11 @@ pub(crate) fn expand(args: ServerArgs, f: ItemFn) -> syn::Result<TokenStream> {
         #vis fn #name(#(#stub_params),*) -> #api::ServerCall<#marker> {
             #stub_body
         }
+
+        // Names the signature's types as written in every build, so imports
+        // used only by the signature stay used when the body is compiled out.
+        // `Ctx` arguments are left out: their types are often server-only.
+        const _: ::core::marker::PhantomData<fn(#(#sig_types),*) #ret> = ::core::marker::PhantomData;
 
         // `server` is the declaring crate's feature. The allow sits on an
         // enclosing item because rustc evaluates a `cfg` before the lint

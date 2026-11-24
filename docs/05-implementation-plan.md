@@ -45,6 +45,33 @@ Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어�
 - **포크 검증**: 포크본이 원본과 달라진 점과 측정 결과를 남깁니다.
 - **배포 가능성**: 공개 크레이트 전부가 패키징됩니다.
 
+### 진행 상황 (2026-11-24)
+
+| 기준 | 상태 | 근거 |
+|---|---|---|
+| 문서 예시 | 충족 | `crates/hyve-tests/tests/mvp.rs` (README `SceneConfig`, §1 스케치에서 `asset!` 제외, `hyve.toml` 픽스처) |
+| 매크로 | 충족 | `crates/hyve-tests/tests/ui.rs`의 컴파일 실패 21건이 `#[model]`·`#[validate]`·`#[server]`·`#[server_ctx]`·`#[hyve::test]`를 모두 다룸. `crate = <경로>`는 `hyve-tests-indirect`가 확인 |
+| 직렬화 | 충족 | `hyve-serde` 테스트: 두 코덱 왕복(`u64::MAX`·`i64::MIN`·무한대·NaN·`-0.0` 비트 단위 포함), 잘린 입력·바이트 변조·깊은 중첩(128 한도)·버퍼를 넘는 길이. 기준 아카이브(`tests/reference.bin`)를 네이티브와 `wasm32`가 모두 읽고 바이트까지 같게 씀(CI `wasm` 작업) |
+| 상태 | 충족 | `hyve-state` 테스트: 슬롯 반환, 갈래 의존의 이펙트 1회, `update` 안 읽기 |
+| 코어 경계 | 충족 | `crates/hyve-tests/tests/boundary.rs` |
+| CLI | **미완** | 10단계 |
+| 포크 검증 | **일부** | 달라진 점은 아래 기록. 원본과의 측정 비교는 **미완** |
+| 배포 가능성 | 충족(로컬) | `cargo package --workspace --offline`으로 공개 크레이트 10개를 임시 로컬 레지스트리에 패키징하고 빌드 검증. 실제 배포는 하지 않음 |
+| CI | **미검증** | 같은 명령(포맷, 린트, 테스트 두 빌드, `1.85` 네이티브·`wasm32` 검사, `wasm32` 테스트)이 로컬에서 통과. GitHub Actions 실행은 푸시 전이라 확인하지 않음 |
+
+### 포크 기록 (2026-11-24)
+
+| 대상 | 원본 | 달라진 점 |
+|---|---|---|
+| `rkyv` | `0.8.18` 고정 의존 | 원본 그대로. 피처는 `std`·`bytecheck`·`little_endian`·`aligned`·`pointer_width_32`. 신뢰할 수 없는 바이트는 원본의 고수준 검증 대신 `hyve-serde`의 깊이 한도(128) 검증기를 거침 |
+| `winnow`, `ariadne`, `bytemuck` | `1.0.5`, `0.6.0`, `1.25.2` 고정 의존 | 원본 그대로 |
+| `hyve-state` | `reactive_graph` `0.3.0-rc1` 레퍼런스 | 자체 구현. 같은 점: 푸시-풀 세 상태(Clean/Check/Dirty), 소유자 트리 정리. 다른 점: 스레드 로컬 단일 스레드 아레나와 세대 번호·런타임 번호가 붙은 핸들, 비동기 스포너·`AnySubscriber` 동적 디스패치 없음. 노드는 구조체 배열이고 값은 `Rc<dyn Any>`라서, §3 개조 방향의 SoA 분리(값 배열·구독자 비트셋)는 **아직 하지 않음**. 측정 뒤에 정함 |
+| `Ulid` | `ulid` `3.0.0` 레퍼런스 | 자체 구현. 난수는 `getrandom`, 같은 밀리초 안에서 단조 증가 |
+| `SharedRingBuf<T>` | `rtrb`·`crossbeam-queue` 레퍼런스 | 자체 구현. 소비형 큐가 아니라 최신 샘플 덮어쓰기와 찢어짐 없는 스냅샷 |
+| JSON | `serde_json` 대신 | `#[model]`이 생성하는 자체 코덱 (§2.3 규칙) |
+
+측정(원본 대비 시그널 갱신·이펙트 전파, 바이너리 인코딩·디코딩)은 아직 실행하지 않았습니다(**미완**).
+
 ### 프리릴리스 기준과 Phase 완료 기준
 
 - **프리릴리스 기준**: 1~9단계(라이브러리)가 위 기준을 충족하면 `0.1.0-alpha.N`을 배포하고, `orbic`과 `serge`는 그 버전에 의존해 시작합니다(`hyperish/docs` `05-development-rules.md` §5). 10단계 중 프레임워크가 필요 없는 부분(`test`, `build` 기본, CLI 공통 계약)도 여기에 포함합니다.

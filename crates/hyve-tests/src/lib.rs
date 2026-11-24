@@ -11,6 +11,10 @@
 
 use hyve::prelude::*;
 
+/// Re-exported the way a framework re-exports `hyve`, for
+/// `hyve-tests-indirect`, which reaches `hyve` only through this path.
+pub use hyve;
+
 /// `README.md` example.
 #[model]
 #[derive(Debug, Clone, PartialEq)]

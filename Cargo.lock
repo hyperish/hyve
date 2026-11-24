@@ -253,6 +253,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyve-tests-indirect"
+version = "0.1.0-alpha.0"
+dependencies = [
+ "hyve-tests",
+]
+
+[[package]]
 name = "hyve-validate"
 version = "0.1.0-alpha.0"
 dependencies = [

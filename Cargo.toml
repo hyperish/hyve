@@ -10,6 +10,7 @@ members = [
     "crates/hyve-serde",
     "crates/hyve-state",
     "crates/hyve-tests",
+    "crates/hyve-tests-indirect",
     "crates/hyve-validate",
 ]
 resolver = "3"

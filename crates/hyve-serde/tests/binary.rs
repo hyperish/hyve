@@ -144,3 +144,74 @@ fn deep_nesting_is_rejected_without_exhausting_the_stack() {
     let ok = nested(hyve_serde::MAX_BINARY_DEPTH / 2);
     assert_eq!(Value::from_binary(&ok.to_binary().unwrap()).unwrap(), ok);
 }
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[rkyv(crate = hyve_serde::__private::rkyv)]
+struct Extremes {
+    big: u64,
+    small: i64,
+    floats: Vec<f64>,
+    single: f32,
+}
+
+#[cfg_attr(
+    all(target_arch = "wasm32", target_os = "unknown"),
+    wasm_bindgen_test::wasm_bindgen_test
+)]
+#[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), test)]
+fn sixty_four_bit_integers_and_non_finite_floats_round_trip() {
+    let x = Extremes {
+        big: u64::MAX,
+        small: i64::MIN,
+        floats: vec![
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+            -0.0,
+            f64::MIN_POSITIVE,
+        ],
+        single: f32::NAN,
+    };
+    let back = Extremes::from_binary(&x.to_binary().unwrap()).unwrap();
+    assert_eq!((back.big, back.small), (u64::MAX, i64::MIN));
+    let bits = |v: &[f64]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
+    assert_eq!(
+        bits(&back.floats),
+        bits(&x.floats),
+        "bit-exact, including NaN and -0.0"
+    );
+    assert_eq!(back.single.to_bits(), f32::NAN.to_bits());
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[rkyv(crate = hyve_serde::__private::rkyv)]
+struct Blob {
+    items: Vec<u8>,
+}
+
+#[cfg_attr(
+    all(target_arch = "wasm32", target_os = "unknown"),
+    wasm_bindgen_test::wasm_bindgen_test
+)]
+#[cfg_attr(not(all(target_arch = "wasm32", target_os = "unknown")), test)]
+fn oversized_lengths_are_rejected() {
+    let bytes = Blob {
+        items: vec![1, 2, 3],
+    }
+    .to_binary()
+    .unwrap();
+    // The root `ArchivedVec` is the last 8 bytes: a 32-bit relative pointer
+    // followed by the 32-bit length (`pointer_width_32`).
+    let n = bytes.len();
+    assert_eq!(&bytes[n - 4..], &3u32.to_le_bytes());
+    // Lengths that reach past the end of the buffer (a length that still fits,
+    // such as 4 here with one padding byte, is valid for `u8` items).
+    for len in [n as u32 + 1, 1 << 20, u32::MAX] {
+        let mut forged = bytes.to_vec();
+        forged[n - 4..].copy_from_slice(&len.to_le_bytes());
+        assert!(
+            Blob::from_binary(&forged).is_err(),
+            "length {len} must be rejected"
+        );
+    }
+}
