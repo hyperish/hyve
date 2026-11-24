@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "apps/hyve-cli",
     "crates/hyve",
     "crates/hyve-api",
     "crates/hyve-config",

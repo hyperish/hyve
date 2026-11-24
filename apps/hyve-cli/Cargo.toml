@@ -1,0 +1,23 @@
+[package]
+name = "hyve-cli"
+description = "The hyve command: test, build and the Hyperish workspace workflow on top of Cargo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "hyve"
+path = "src/main.rs"
+# The library crate `hyve` documents under the same name.
+doc = false
+
+[dependencies]
+hyve-core.workspace = true
+hyve-diagnostics.workspace = true
+hyve-serde.workspace = true
+
+[lints]
+workspace = true
