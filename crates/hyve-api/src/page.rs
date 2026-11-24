@@ -114,6 +114,59 @@ impl<T: Json> Json for Page<T> {
             },
         })
     }
+
+    /// `{"data": [...], "page": {"nextCursor": ..., "hasMore": ...}}`
+    /// (`hyperish/docs` `03-api-protocol.md` §4).
+    fn encode_data(&self, w: &mut JsonWriter) {
+        w.begin_object();
+        w.key("data");
+        Json::encode_json(&self.items, w);
+        w.key("page");
+        w.begin_object();
+        w.key("nextCursor");
+        Json::encode_json(&self.next_cursor, w);
+        w.key("hasMore");
+        Json::encode_json(&self.has_more, w);
+        w.end_object();
+        w.end_object();
+    }
+
+    fn decode_data(r: &mut JsonReader<'_>) -> Result<Self, DecodeError> {
+        r.begin_object()?;
+        let (mut items, mut page) = (None, None);
+        while let Some(key) = r.next_key()? {
+            match &*key {
+                "data" if items.is_none() => items = Some(<Vec<T> as Json>::decode_json(r)?),
+                "page" if page.is_none() => {
+                    r.begin_object()?;
+                    let (mut next, mut more) = (None, None);
+                    while let Some(key) = r.next_key()? {
+                        match &*key {
+                            "nextCursor" if next.is_none() => {
+                                next = Some(<Option<String> as Json>::decode_json(r)?)
+                            }
+                            "hasMore" if more.is_none() => more = Some(bool::decode_json(r)?),
+                            "nextCursor" | "hasMore" => return Err(r.duplicate_field(&key)),
+                            _ => r.skip_value()?,
+                        }
+                    }
+                    page = Some((
+                        next.unwrap_or(None),
+                        more.ok_or_else(|| r.missing_field("hasMore"))?,
+                    ));
+                }
+                "data" | "page" => return Err(r.duplicate_field(&key)),
+                _ => r.skip_value()?,
+            }
+        }
+        let items = items.ok_or_else(|| r.missing_field("data"))?;
+        let (next_cursor, has_more) = page.ok_or_else(|| r.missing_field("page"))?;
+        Ok(Page {
+            items,
+            next_cursor,
+            has_more,
+        })
+    }
 }
 
 impl<T: Validate> Validate for Page<T> {

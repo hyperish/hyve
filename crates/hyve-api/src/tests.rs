@@ -331,7 +331,7 @@ impl Loopback {
                         drop(response);
                         Ok(Reply::NoContent)
                     }
-                    Ok(response) => Ok(Reply::Json(to_json(&response))),
+                    Ok(response) => Ok(Reply::Json(hyve_serde::to_json_data(&response))),
                     Err(e) => {
                         let public = e.to_public();
                         // Kind and retryability travel as status code and
@@ -604,4 +604,34 @@ fn page_and_cursor_shapes() {
         SchemaNode::Ref("Page_String".into())
     );
     assert!(r.get("Project").is_some());
+}
+
+#[test]
+fn success_bodies_use_the_data_envelope() {
+    use hyve_serde::{from_json_data, to_json_data};
+    assert_eq!(to_json_data(&7u32), r#"{"data":7}"#);
+    assert_eq!(from_json_data::<u32>(r#"{"meta":1,"data":7}"#).unwrap(), 7);
+    assert!(from_json_data::<u32>(r#"{"data":7,"data":8}"#).is_err());
+    assert!(from_json_data::<u32>("{}").is_err());
+
+    let page = Page {
+        items: vec![1u32, 2],
+        next_cursor: Some("c".into()),
+        has_more: true,
+    };
+    let json = to_json_data(&page);
+    assert_eq!(
+        json,
+        r#"{"data":[1,2],"page":{"nextCursor":"c","hasMore":true}}"#
+    );
+    assert_eq!(from_json_data::<Page<u32>>(&json).unwrap(), page);
+    let last = r#"{"data":[],"page":{"hasMore":false}}"#;
+    assert_eq!(
+        from_json_data::<Page<u32>>(last).unwrap(),
+        Page {
+            items: vec![],
+            next_cursor: None,
+            has_more: false
+        }
+    );
 }

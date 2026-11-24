@@ -64,6 +64,50 @@ pub trait Json: Sized {
     fn missing() -> Option<Self> {
         None
     }
+
+    /// Writes the standard-rail success body for `self`: `{"data": <value>}`
+    /// (`hyperish/docs` `03-api-protocol.md` §4). A list page overrides it
+    /// with `{"data": [...], "page": {...}}`.
+    fn encode_data(&self, w: &mut JsonWriter) {
+        w.begin_object();
+        w.key("data");
+        self.encode_json(w);
+        w.end_object();
+    }
+
+    /// Reads a body written by [`encode_data`](Json::encode_data); other keys
+    /// are skipped.
+    fn decode_data(r: &mut JsonReader<'_>) -> Result<Self, DecodeError> {
+        r.begin_object()?;
+        let mut data = None;
+        while let Some(key) = r.next_key()? {
+            if key == "data" {
+                if data.is_some() {
+                    return Err(r.duplicate_field("data"));
+                }
+                data = Some(Self::decode_json(r)?);
+            } else {
+                r.skip_value()?;
+            }
+        }
+        data.ok_or_else(|| r.missing_field("data"))
+    }
+}
+
+/// Encodes the standard-rail success body for `value` ([`Json::encode_data`]).
+pub fn to_json_data<T: Json>(value: &T) -> String {
+    let mut w = JsonWriter::new();
+    value.encode_data(&mut w);
+    w.into_string()
+}
+
+/// Decodes a standard-rail success body ([`Json::decode_data`]) with the
+/// default limits.
+pub fn from_json_data<T: Json>(input: &str) -> Result<T, DecodeError> {
+    let mut r = JsonReader::new(input, JsonLimits::DEFAULT)?;
+    let v = T::decode_data(&mut r)?;
+    r.finish()?;
+    Ok(v)
 }
 
 /// Encodes `value` as a JSON string.

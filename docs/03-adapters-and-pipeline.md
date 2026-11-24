@@ -79,7 +79,7 @@
   - 종류: 상태 코드가 4xx면 `Domain`, `503`이면 `Infra`, 그 밖의 5xx면 `Internal`.
   - `code`, `message`, `details`, `requestId`: 봉투의 `error` 필드 그대로.
   - 재시도 가능 여부: `Retry-After` 헤더가 있으면 참.
-- 성공 응답은 `200`이면 `data`를 응답 모델로 읽고, `204`면 값 없는 성공입니다.
+- 성공 응답은 `200`이면 `data`를 응답 모델로 읽고, `204`면 값 없는 성공입니다. 목록 응답(`Page<T>`)은 `data`의 항목과 `page`의 커서를 합쳐 읽습니다. 봉투를 쓰고 읽는 규칙은 `hyve-serde`의 `Json::encode_data`/`decode_data`(`to_json_data`/`from_json_data`) 하나이고 `Page<T>`가 이를 재정의하므로, 서버 어댑터와 전송은 봉투를 따로 구현하지 않습니다. 전송은 성공 본문 전체를 스텁에 넘깁니다(제안, 2026-11-24).
 
 ### 3.5 자격 증명
 

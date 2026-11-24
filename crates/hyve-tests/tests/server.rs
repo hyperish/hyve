@@ -163,7 +163,7 @@ mod with_server_feature {
                 Ok(_) if M::Response::FINGERPRINT == <() as Fingerprint>::FINGERPRINT => {
                     Ok(Reply::NoContent)
                 }
-                Ok(v) => Ok(Reply::Json(to_json(&v))),
+                Ok(v) => Ok(Reply::Json(hyve::serde::to_json_data(&v))),
                 Err(e) if fast => {
                     let bytes = ErrorWire::from(&e.to_public()).to_binary()?;
                     Err(ErrorWire::from_binary(&bytes)

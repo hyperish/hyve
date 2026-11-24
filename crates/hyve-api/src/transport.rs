@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use hyve_core::{CancellationToken, HyveResult, Scope, Scoped};
-use hyve_serde::json::{from_json, to_json};
+use hyve_serde::json::{from_json, from_json_data, to_json};
 use hyve_serde::{AlignedBytes, EncodeError};
 
 use crate::{ServerFn, ServerFnDescriptor, Wire, errors};
@@ -179,7 +179,8 @@ impl fmt::Debug for Call {
 pub enum Reply {
     /// Fast rail: the archived response model.
     Binary(AlignedBytes),
-    /// Standard rail: the response model as JSON (the envelope's `data`).
+    /// Standard rail `200`: the whole success body, `{"data": ...}` (a list
+    /// page also carries `"page"`; see `hyve_serde::Json::encode_data`).
     Json(String),
     /// Standard rail `204`: success without a value.
     NoContent,
@@ -197,7 +198,7 @@ impl Reply {
     pub fn decode<T: Wire>(self) -> HyveResult<T> {
         match self {
             Reply::Binary(bytes) => T::from_binary(&bytes).map_err(|e| e.into_response_error()),
-            Reply::Json(text) => from_json::<T>(&text).map_err(|e| e.into_response_error()),
+            Reply::Json(text) => from_json_data::<T>(&text).map_err(|e| e.into_response_error()),
             // `()` and `Option<T>` accept "no value"; anything else expected one.
             Reply::NoContent => from_json::<T>("null").map_err(|_| {
                 errors::decode_failed(
