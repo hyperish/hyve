@@ -1,6 +1,6 @@
 # 01. DX 및 코어 매크로·CLI 설계 (hyve)
 
-> 상태: 범용 모델·검증·설정·상태(`signal`)·에셋(`asset!`) DX 및 `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드 및 Phase 컷은 **제안** · 기준일: 2026-11-19
+> 상태: 범용 모델·검증·설정·상태(`signal`)·에셋(`asset!`) DX 및 `init`/`preview`/`lint`/`test`/`build` CLI 범위는 **확정**, 세부 키워드 및 Phase 컷은 **제안** · 기준일: 2026-11-24
 
 `hyve`의 목표는 그래픽 엔진, CLI, 네이티브 툴, 백엔드(`orbic`), UI(`serge`) 등 **어떤 종류의 Rust 프로젝트를 작성하든 파편화된 서드파티 크레이트 조립 없이 단일 코어와 단일 CLI 도구로 즉시 개발을 시작**하게 하는 것입니다. 범용 원칙은 `hyperish/docs`의 `01-dx-principles.md`를 따릅니다. (UI 뷰 마크업 DSL은 [`serge`](https://github.com/hyperish/serge)가 전담합니다.)
 
@@ -10,6 +10,10 @@
   - `serde`, `validator`, 스키마 리플렉션 크레이트를 따로 붙이지 않고 `#[model]`과 `#[validate(...)]`만으로 고성능 직렬화(`hyve-serde`), 구조적 검증(`hyve-validate`), 범용 스키마 메타데이터를 한 번에 얻습니다.
 - **시작 시점 환경 설정 검증 (`hyve-config`)**:
   - `.env`, `hyve.toml`, 환경 변수를 `#[model]` 구조체로 읽어 앱 시작 즉시 검증합니다.
+  - 우선순위는 CLI 인자 > 환경 변수 > `.env` > `hyve.toml` > 모델 기본값이며, 뒤의 원천은 앞의 값을 덮지 못합니다(제안).
+  - 모델 기본값은 설정 모델의 `Default` 구현입니다. `Default`가 없는 모델은 모든 필드가 원천 중 하나에 있어야 합니다(제안).
+  - `hyve.toml`은 최상위 테이블로 소유자를 나눕니다. `[app]`은 앱의 설정 모델 필드이고, `[hyve]`·`[orbic]`·`[serge]`는 각 프레임워크와 도구가 읽는 설정입니다. CLI 인자는 `--set <필드>=<값>` 형태로 `[app]`의 값을 덮습니다(제안).
+  - 환경 변수 이름은 필드명의 SCREAMING_SNAKE_CASE에 앱이 정한 접두어를 붙입니다. 접두어는 `hyve.toml`의 `[hyve] env_prefix`로 정하고 기본값은 `APP`입니다(`fps` → `APP_FPS`). 프레임워크가 읽는 변수는 `HYPERISH_` 접두어를 씁니다(`hyperish/docs` `06-naming-conventions.md` §1). 검증에 실패하면 어느 원천의 어느 키가 틀렸는지 알립니다(제안).
 - **플랫폼 중립 반응형 상태 (`signal(init)`)**:
   - UI뿐 아니라 범용 애플리케이션·시뮬레이션·엔진 상태 그래프에서도 직관적인 `signal(0)`을 동일하게 사용합니다.
 - **컴파일 타임 에셋 검증 (`asset!`)**:
@@ -57,6 +61,17 @@ Node.js에서 `npm` + `vite` + `vitest` + `eslint`를 따로 설치·설정하�
 | `hyve codegen` | 단독 코드 생성 (보조 명령) | `hyve build`나 `hyve preview` 내부에서 자동 실행되는 `codegen` 단계만 단독으로 실행할 때 사용하는 보조 명령(IDE 자동완성 갱신, 외부 스키마·바인딩 사전 생성 및 점검용) |
 
 > 이 표가 `hyve` CLI 대표 명령의 기준 목록입니다. `codegen`은 별개의 독립 워크플로가 아니라 `build`·`preview` 파이프라인에 기본 포함되는 선행 단계이며, 전체 컴파일 없이 생성 코드만 갱신·검증할 때 `hyve codegen`으로 단독 호출합니다.
+
+### CLI 공통 계약 (제안, 2026-11-24)
+
+- 아직 구현되지 않은 명령이나 옵션은 성공으로 끝내지 않습니다. 미구현임을 알리고 0이 아닌 종료 코드로 끝납니다.
+- `hyve test`, `hyve build`, `hyve lint`의 종료 코드는 실제 결과를 따릅니다. 대상 워크스페이스를 찾지 못하면 오류입니다.
+- `hyve init`은 기존 파일을 덮어쓰지 않습니다. 대상 위치에 파일이 있으면 중단하고, 덮어쓰기는 명시한 옵션으로만 합니다.
+- 알 수 없는 템플릿 이름과 옵션은 오류입니다.
+- **Phase 1의 이름**: `hyve init --template <이름>`의 템플릿은 `fullstack`, `serge-app`, `orbic-service` 셋입니다. 덮어쓰기 옵션은 `--force`입니다. `hyve preview`는 `--web`과 `--native`로 UI 타깃을 고르고, 둘 다 없으면 워크스페이스에 있는 대상을 모두 띄웁니다. 템플릿이 적는 `hyve`·`orbic`·`serge` 버전 요구는 그 CLI 릴리스와 함께 검증한 버전입니다.
+- **설치**: 실행 파일 `hyve`는 `hyve-cli` 패키지가 제공합니다.
+- **프레임워크 단계 호출**: `hyve-cli`는 `orbic`과 `serge`를 링크하지 않습니다(의존 방향은 `orbic`, `serge` → `hyve`). 각 프레임워크는 자기 단계를 `hyve-<프레임워크>` 실행 파일(`hyve-orbic`, `hyve-serge`)로 제공하고, `hyve`는 대상 워크스페이스가 의존하는 프레임워크의 실행 파일을 같은 하위 명령 이름으로 호출합니다(`hyve codegen` → `hyve-orbic codegen`). 실행 파일이 없거나 워크스페이스가 쓰는 프레임워크 버전과 다르면 설치 방법을 알리고 오류로 끝냅니다. 하위 프로세스의 종료 코드가 0이 아니면 `hyve`도 실패합니다.
+- **`codegen`**: Phase 1의 `hyve codegen`은 프레임워크 단계를 순서대로 실행하는 것이 전부이고, `hyve codegen --check`는 생성물이 현재 소스와 일치하는지만 확인해 다르면 실패합니다. Phase 1에서 단계를 제공하는 것은 `orbic`의 `sql!` 캐시입니다(`orbic/docs/01-dx-and-dsl.md` §4).
 
 ## 3. 진단 메시지 원칙
 
