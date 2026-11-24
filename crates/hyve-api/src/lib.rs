@@ -57,6 +57,9 @@ pub mod codes {
     pub const TIMEOUT: &str = "timeout";
     /// The response could not be read on either rail.
     pub const DECODE_FAILED: &str = "decode_failed";
+    /// The caller cancelled the call (its `CancellationToken`) before it
+    /// completed; the transport abandoned the request.
+    pub const CANCELLED: &str = "cancelled";
     /// The fast-rail schema fingerprint differs from the server's (`415`).
     pub const SCHEMA_MISMATCH: &str = "schema_mismatch";
     /// The route does not accept the fast rail or does not know the function (`415`).
@@ -82,6 +85,11 @@ pub mod errors {
     /// The response could not be decoded.
     pub fn decode_failed(message: impl Into<String>) -> HyveError {
         HyveError::infra(codes::DECODE_FAILED, message).with_public_code()
+    }
+
+    /// The caller cancelled the call; not retryable (the caller is gone).
+    pub fn cancelled(message: impl Into<String>) -> HyveError {
+        HyveError::infra(codes::CANCELLED, message).with_public_code()
     }
 }
 
