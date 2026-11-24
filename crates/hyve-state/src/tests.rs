@@ -338,3 +338,28 @@ fn fan_out_reruns_leave_the_edges_in_place() {
         "the same edges in the same order"
     );
 }
+
+#[test]
+fn a_rerun_empties_its_scope_and_ends_the_previous_runs_handle() {
+    let s = signal(0);
+    let scopes = log();
+    let seen = scopes.clone();
+    let cleaned = Rc::new(Cell::new(0));
+    let c = cleaned.clone();
+    effect(move || {
+        s();
+        seen.borrow_mut().push(Owner::current());
+        let c = c.clone();
+        on_cleanup(move || c.set(c.get() + 1));
+        // A child node of this run.
+        let _ = signal(1);
+    });
+    let (nodes, owners) = live();
+    s.set(1);
+    s.set(2);
+    assert_eq!(cleaned.get(), 2);
+    assert_eq!(live(), (nodes, owners), "no slot is left behind");
+    let scopes = scopes.borrow();
+    assert!(!scopes[0].is_alive() && !scopes[1].is_alive());
+    assert!(scopes[2].is_alive());
+}

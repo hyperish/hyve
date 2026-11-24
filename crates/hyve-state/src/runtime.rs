@@ -420,11 +420,13 @@ impl Runtime {
 
     fn recompute(&self, index: u32, generation: u32) {
         // Dispose what the previous run created, before switching context.
+        // The run's scope is emptied in place (not replaced), so it keeps its
+        // place among its parent's children.
         let released = {
             let mut st = self.st();
             let mut released = Released::default();
             if let Some(old) = st.nodes[index as usize].run_owner.take() {
-                dispose_owner_ref(&mut st, old, &mut released);
+                st.nodes[index as usize].run_owner = reset_owner(&mut st, old, &mut released);
             }
             released
         };
@@ -436,7 +438,10 @@ impl Runtime {
                 return;
             }
             let parent = st.nodes[index as usize].owner;
-            let run_owner = new_owner_slot(&mut st, parent);
+            let run_owner = match st.nodes[index as usize].run_owner {
+                Some(o) if st.owner_alive(o) => o,
+                _ => new_owner_slot(&mut st, parent),
+            };
             let node = &mut st.nodes[index as usize];
             node.run_owner = Some(run_owner);
             node.state = NodeState::Clean;
@@ -446,9 +451,14 @@ impl Runtime {
                 .expect("hyve-state: computed node without a function");
             // The previous run's edges become stale: the run re-registers
             // what it reads (keeping those edges), the rest go afterwards.
-            // (A run that panicked left its stale edges; they merge in.)
-            let mut previous = std::mem::take(&mut node.sources);
-            node.stale.append(&mut previous);
+            // The two lists swap, so a re-run allocates nothing for its
+            // edges. (A run that panicked left its stale edges; they merge in.)
+            if node.stale.is_empty() {
+                std::mem::swap(&mut node.sources, &mut node.stale);
+            } else {
+                let mut previous = std::mem::take(&mut node.sources);
+                node.stale.append(&mut previous);
+            }
             let saved = Saved {
                 observer: st.observer.replace(index),
                 owner: std::mem::replace(&mut st.owner, run_owner),
@@ -465,13 +475,16 @@ impl Runtime {
         if !st.node_alive(index, generation) {
             return;
         }
-        // Drop the edges to sources this run did not read.
-        let stale = std::mem::take(&mut st.nodes[index as usize].stale);
-        for s in stale {
+        // Drop the edges to sources this run did not read (the list keeps
+        // its capacity for the next run).
+        let mut stale = std::mem::take(&mut st.nodes[index as usize].stale);
+        for &s in &stale {
             if !st.nodes[index as usize].sources.contains(&s) {
                 st.nodes[s as usize].observers.retain(|&o| o != index);
             }
         }
+        stale.clear();
+        st.nodes[index as usize].stale = stale;
         if changed && st.nodes[index as usize].kind == Kind::Memo {
             let observers = st.nodes[index as usize].observers.clone();
             for o in observers {
@@ -679,6 +692,36 @@ fn new_owner_slot(st: &mut State, parent: u32) -> OwnerRef {
         index,
         generation: st.owners[index as usize].generation,
     }
+}
+
+/// Empties an owner for a re-run of its node: disposes what it holds and
+/// bumps its generation (handles to the previous run's scope are dead), but
+/// keeps the slot and its place among its parent's children, which a
+/// dispose and a new slot would cost a scan of the siblings for.
+fn reset_owner(st: &mut State, o: OwnerRef, released: &mut Released) -> Option<OwnerRef> {
+    if !st.owner_alive(o) {
+        return None;
+    }
+    let (children, nodes, cleanups) = {
+        let slot = &mut st.owners[o.index as usize];
+        slot.generation = slot.generation.wrapping_add(1);
+        (
+            std::mem::take(&mut slot.children),
+            std::mem::take(&mut slot.nodes),
+            std::mem::take(&mut slot.cleanups),
+        )
+    };
+    for c in children {
+        dispose_owner(st, c, released);
+    }
+    for n in nodes {
+        dispose_node(st, n, released);
+    }
+    released.cleanups.extend(cleanups);
+    Some(OwnerRef {
+        index: o.index,
+        generation: st.owners[o.index as usize].generation,
+    })
 }
 
 fn dispose_owner_ref(st: &mut State, o: OwnerRef, released: &mut Released) {
