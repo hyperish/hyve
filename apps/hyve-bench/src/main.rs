@@ -555,6 +555,37 @@ fn codecs() {
             }),
         ],
     );
+    // Where the encoding time goes: the page's numbers and strings alone.
+    let floats: Vec<f64> = page.items.iter().map(|i| i.score + 0.1).collect();
+    let (f1, f2) = (floats.clone(), floats);
+    scenario(
+        "JSON encode, 100 floats",
+        20_000,
+        "array",
+        &[
+            run("hyve-serde to_json", move |n| {
+                timed(n, || hyve_serde::json::to_json(&f1), |s| s.len() as u64)
+            }),
+            run("serde_json::to_string", move |n| {
+                timed(n, || serde_json::to_string(&f2).unwrap(), |s| s.len() as u64)
+            }),
+        ],
+    );
+    let strings: Vec<String> = page.items.iter().map(|i| i.title.clone()).collect();
+    let (t1, t2) = (strings.clone(), strings);
+    scenario(
+        "JSON encode, 100 strings",
+        20_000,
+        "array",
+        &[
+            run("hyve-serde to_json", move |n| {
+                timed(n, || hyve_serde::json::to_json(&t1), |s| s.len() as u64)
+            }),
+            run("serde_json::to_string", move |n| {
+                timed(n, || serde_json::to_string(&t2).unwrap(), |s| s.len() as u64)
+            }),
+        ],
+    );
     let (j1, j2) = (ours.clone(), ours);
     scenario(
         "JSON decode",

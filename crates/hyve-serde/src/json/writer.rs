@@ -104,9 +104,11 @@ impl JsonWriter {
     pub fn int(&mut self, v: i128) {
         self.before_value();
         if v.unsigned_abs() <= EXACT_INT {
-            let _ = write!(self.out, "{v}");
+            write_int(&mut self.out, v);
         } else {
-            let _ = write!(self.out, "\"{v}\"");
+            self.out.push('"');
+            write_int(&mut self.out, v);
+            self.out.push('"');
         }
     }
 
@@ -115,16 +117,18 @@ impl JsonWriter {
     /// mark a string as an integer).
     pub fn exact_int(&mut self, v: i128) {
         self.before_value();
-        let _ = write!(self.out, "{v}");
+        write_int(&mut self.out, v);
     }
 
     /// An unsigned integer (decimal string when v > 2^53).
     pub fn uint(&mut self, v: u128) {
         self.before_value();
         if v <= EXACT_INT {
-            let _ = write!(self.out, "{v}");
+            write_uint(&mut self.out, v);
         } else {
-            let _ = write!(self.out, "\"{v}\"");
+            self.out.push('"');
+            write_uint(&mut self.out, v);
+            self.out.push('"');
         }
     }
 
@@ -167,6 +171,31 @@ impl JsonWriter {
 /// Shortest round-trip digits; exponent form only for extreme magnitudes. The
 /// text always has a fraction or an exponent, so a float stays a float when
 /// read back schemalessly (`1.0`, not `1`).
+/// Integers that fit 64 bits are formatted as such: formatting a 128-bit
+/// value is several times slower, and every integer field passes through
+/// here as one.
+fn write_int(out: &mut String, v: i128) {
+    match i64::try_from(v) {
+        Ok(small) => {
+            let _ = write!(out, "{small}");
+        }
+        Err(_) => {
+            let _ = write!(out, "{v}");
+        }
+    }
+}
+
+fn write_uint(out: &mut String, v: u128) {
+    match u64::try_from(v) {
+        Ok(small) => {
+            let _ = write!(out, "{small}");
+        }
+        Err(_) => {
+            let _ = write!(out, "{v}");
+        }
+    }
+}
+
 fn write_float(out: &mut String, abs: f64, plain: fmt::Arguments<'_>, exp: fmt::Arguments<'_>) {
     let start = out.len();
     if abs == 0.0 || (1e-5..1e16).contains(&abs) {
@@ -179,7 +208,20 @@ fn write_float(out: &mut String, abs: f64, plain: fmt::Arguments<'_>, exp: fmt::
     }
 }
 
+fn needs_escape(b: u8) -> bool {
+    b < 0x20 || b == b'"' || b == b'\\' || b == 0x7f
+}
+
 fn write_escaped(out: &mut String, s: &str) {
+    // Most strings need no escape: one branch-free scan (it vectorizes),
+    // then a single copy.
+    if !s.bytes().fold(false, |any, b| any | needs_escape(b)) {
+        out.reserve(s.len() + 2);
+        out.push('"');
+        out.push_str(s);
+        out.push('"');
+        return;
+    }
     out.push('"');
     let mut start = 0;
     for (i, b) in s.bytes().enumerate() {
