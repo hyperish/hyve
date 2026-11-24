@@ -113,9 +113,9 @@ impl Workspace {
     /// (`preview`: long-running servers and windows). Each tool's stdin is a
     /// pipe from `hyve` and `HYVE_STAGE_LIFELINE=stdin` tells it so: when the
     /// pipe closes (`hyve` stops it or exits), the tool stops what it
-    /// started and exits. A tool that fails stops the others and `hyve`
-    /// ends with its exit code; a tool that succeeds leaves the others
-    /// running. Returns how many ran.
+    /// started and exits. When any tool ends (a window closed, a failure),
+    /// the preview is over: `hyve` stops the others and ends with that
+    /// tool's exit code. Returns how many ran.
     pub(crate) fn run_stage_together(&self, stage: &str, args: &[&str]) -> Result<usize, Fail> {
         use std::process::Stdio;
         use std::time::{Duration, Instant};
@@ -138,21 +138,24 @@ impl Workspace {
             }
         }
         loop {
-            let mut failed = None;
+            let mut ended = None;
             running.retain_mut(|(_, child)| match child.try_wait() {
                 Ok(Some(status)) => {
-                    if !status.success() && failed.is_none() {
-                        failed = Some(status.code());
-                    }
+                    ended.get_or_insert(status);
                     false
                 }
                 Ok(None) => true,
                 Err(_) => false,
             });
-            if let Some(code) = failed {
+            if let Some(status) = ended {
                 stop_all(&mut running);
-                return Err(Fail::Child(code));
+                return if status.success() {
+                    Ok(tools.len())
+                } else {
+                    Err(Fail::Child(status.code()))
+                };
             }
+            // No tool provides the stage (or none can be waited on).
             if running.is_empty() {
                 return Ok(tools.len());
             }

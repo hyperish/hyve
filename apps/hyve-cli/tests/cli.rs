@@ -357,9 +357,9 @@ fn fake_preview_tool(bin: &Path, framework: &str, version: &str, body: &str) {
 }
 
 /// `preview` stages run at the same time with a stdin lifeline: a stage
-/// that fails stops the others (they see their stdin close) and `hyve`
-/// ends with its code; a stage that succeeds leaves the others running; a
-/// stage that ignores the lifeline is killed after a grace period.
+/// that ends (fails, or succeeds: its window closed) stops the others (they
+/// see their stdin close) and `hyve` ends with its code; a stage that
+/// ignores the lifeline is killed after a grace period.
 #[cfg(unix)]
 #[test]
 fn preview_stages_run_together_and_stop_together() {
@@ -389,22 +389,19 @@ fn preview_stages_run_together_and_stop_together() {
     );
     assert!(log.ends_with("orbic stopped\n"), "orbic was stopped: {log}");
 
-    // A stage that ends well does not stop the others.
+    // A stage that ends well (its window closed) ends the preview too.
     fake_preview_tool(
         &bin,
         "serge",
         "0.2.0",
-        "echo 'serge done' >> \"$HYVE_FAKE_LOG\"",
+        "sleep 0.5\necho 'window closed' >> \"$HYVE_FAKE_LOG\"",
     );
-    fake_preview_tool(
-        &bin,
-        "orbic",
-        "0.1.0",
-        "sleep 1\necho 'orbic done' >> \"$HYVE_FAKE_LOG\"",
-    );
-    let (o, log) = hyve_with_tools(&d, &bin, &["preview"]);
+    let (o, log) = hyve_with_tools(&d, &bin, &["preview", "--native"]);
     assert!(o.status.success(), "{}", stderr(&o));
-    assert_eq!(log, "serge done\norbic done\n");
+    assert_eq!(
+        log,
+        "orbic up preview --native\nwindow closed\norbic stopped\n"
+    );
 
     // A stage that ignores its lifeline is killed.
     fake_preview_tool(&bin, "orbic", "0.1.0", "exec sleep 60");
