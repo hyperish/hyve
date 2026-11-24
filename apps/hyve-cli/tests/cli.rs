@@ -123,7 +123,6 @@ fn unimplemented_commands_never_succeed() {
     for args in [
         &["init", "--template", "fullstack"][..],
         &["init"],
-        &["preview", "--web"],
         &["lint"],
     ] {
         let o = hyve(&d, args);
@@ -275,7 +274,20 @@ fn codegen_and_build_call_the_framework_stages() {
     assert_eq!(log, "orbic codegen --check\n");
     let (o, log) = hyve_with_tools(&d, &bin, &["build", "--debug"]);
     assert!(o.status.success(), "{}", stderr(&o));
-    assert_eq!(log, "serge build\n");
+    assert_eq!(log, "serge build --debug\n");
+    // `preview` is serge's stage, flags passed through; without a tool
+    // providing it there is nothing to preview.
+    let (o, log) = hyve_with_tools(&d, &bin, &["preview", "--web"]);
+    assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
+    assert!(
+        stderr(&o).contains("nothing to preview") && log.is_empty(),
+        "{}",
+        stderr(&o)
+    );
+    fake_tool(&bin, "serge", "0.2.0", &["build", "preview"], 0);
+    let (o, log) = hyve_with_tools(&d, &bin, &["preview", "--native"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(log, "serge preview --native\n");
     // Tests need no stages.
     let (o, log) = hyve_with_tools(&d, &bin, &["test"]);
     assert!(o.status.success() && log.is_empty(), "{}", stderr(&o));

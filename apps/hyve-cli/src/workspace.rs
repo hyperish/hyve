@@ -91,9 +91,12 @@ impl Workspace {
     /// 호출): `hyve-<framework> stages` says the executable's version (first
     /// line) and its stages (one per line); the version must equal the
     /// framework's in the workspace's `Cargo.lock`.
-    pub(crate) fn run_stages(&self, stage: &str, args: &[&str]) -> Result<(), Fail> {
+    /// Runs `stage` in every framework tool that provides it (orbic, then
+    /// serge); returns how many ran it.
+    pub(crate) fn run_stages(&self, stage: &str, args: &[&str]) -> Result<usize, Fail> {
+        let mut ran = 0;
         if self.frameworks.is_empty() {
-            return Ok(());
+            return Ok(ran);
         }
         let locked = self.locked_versions()?;
         for framework in &self.frameworks {
@@ -147,8 +150,9 @@ impl Workspace {
             if !status.success() {
                 return Err(Fail::Child(status.code()));
             }
+            ran += 1;
         }
-        Ok(())
+        Ok(ran)
     }
 
     /// `(name, version)` of the frameworks in `Cargo.lock` (written by a full

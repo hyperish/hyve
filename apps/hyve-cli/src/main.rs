@@ -211,7 +211,7 @@ fn test(args: &[String]) -> Result<(), Fail> {
 fn build(args: &[String]) -> Result<(), Fail> {
     let o = cargo_options("build", args, &["--debug"])?;
     let ws = Workspace::find()?;
-    ws.run_stages("build", &[])?;
+    ws.run_stages("build", if o.debug { &["--debug"] } else { &[] })?;
     let mut cmd = ws.cargo("build");
     select(&mut cmd, &o.packages);
     if !o.debug {
@@ -233,6 +233,7 @@ fn codegen(args: &[String]) -> Result<(), Fail> {
     }
     let check = args.iter().any(|a| a == "--check");
     ws.run_stages("codegen", if check { &["--check"] } else { &[] })
+        .map(|_| ())
 }
 
 fn init(args: &[String]) -> Result<(), Fail> {
@@ -271,9 +272,17 @@ fn preview(args: &[String]) -> Result<(), Fail> {
             return Err(unknown_option("preview", a, &["--web", "--native"]));
         }
     }
-    Err(Fail::NotImplemented(
-        "`hyve preview` (it runs the orbic and serge stages)".into(),
-    ))
+    let ws = Workspace::find()?;
+    let flags: Vec<&str> = args.iter().map(String::as_str).collect();
+    match ws.run_stages("preview", &flags)? {
+        0 => Err(Fail::Failed(
+            "nothing to preview: no framework of this workspace provides a `preview` stage".into(),
+            Some(
+                "`hyve preview` runs `hyve-serge preview`; add a serge app to the workspace".into(),
+            ),
+        )),
+        _ => Ok(()),
+    }
 }
 
 fn select(cmd: &mut Command, packages: &[String]) {
