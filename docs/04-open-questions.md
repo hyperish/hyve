@@ -9,7 +9,6 @@
 | # | 결정 항목 | 왜 중요한가 | 지금의 방향(제안) |
 |---|---|---|---|
 | 1 | `hyve preview`의 바이너리 핫패칭 세부 메커니즘 (Phase 3) | Rust 컴파일 시간을 극복하고 즉각적인 피드백 루프를 만드는 고급 단계 | Phase 2 상태 보존 HMR 우선 구축 후, Phase 3에서 Subsecond 계열 바이너리 핫패칭 검토. **결정 시점: Phase 3 착수 전** (Phase 1·2를 막지 않음) |
-| 2 | `#[model]`의 입력 범위와 예시가 쓰는 API 표면 | `#[model]`이 enum·제네릭을 받는지, 어떤 표준 트레이트를 구현하는지, 다른 크레이트의 속성(`#[table]`, `#[pk]`)을 어떻게 다루는지와, 형제 레포 예시가 쓰는 `Signal<T>` 호출 문법(`count()`)·`.toggle()`·`SharedRingBuf::read_latest_snapshot`이 문서에 정의돼 있지 않음 | 구조체와 enum, 제네릭을 받고 소유하지 않은 속성은 그대로 통과시키며, 세 레포 문서 예시에 나온 표면을 그대로 제공. **결정 시점: `hyve-macros`·`hyve-state` 착수 전** (작업 순서를 막지 않음) |
 
 ## 결정됨
 
@@ -34,3 +33,5 @@
 - **인라인 서버 함수 전송 계약 추가(제안)** (2026-11-24): 매크로가 남기는 것, 스텁의 전송 조회, 고속 레일의 HTTP 운반 형식과 불일치 폴백, 표준 레일의 오류 복원, 자격 증명의 책임을 한 절에 모음. 미디어 타입과 헤더 이름은 `hyve-api` 상수가 기준 (`03-adapters-and-pipeline.md` §3)
 - **경계 세부 추가(제안)** (2026-11-24): `rkyv` 포맷 제어 조합(`little_endian`·`aligned`·`pointer_width_32`), JSON의 손실 없는 표현(JSON 수로 정확히 표현할 수 없는 정수와 비유한 부동소수는 문자열), `#[server]`·`#[validate]`의 Phase 1 문법, 스키마 메타데이터의 소유(`hyve-validate`), `Id<T>`·`HyveError`·`Path<T>`·`Query<T>`의 소유, `#[hyve::test]` 런타임의 위치(`hyve`의 `test` 피처), `hyve.toml` 구조와 환경 변수 접두어, CLI의 템플릿·옵션 이름과 프레임워크 단계 호출 방식 (`01-dx-and-dsl.md` §1, §2, `02-architecture.md` §1, §2)
 - **전송 트레이트의 수준과 폴백 조건 정리(제안)** (2026-11-24): 전송 트레이트는 타입이 있는 호출 수준이고 레일 선택·HTTP 변환·폴백은 전송 구현의 일. 고속 레일 요청에 `415`가 오면 `code`와 무관하게 표준 레일로 한 번 폴백. 인프로세스 전송은 기본적으로 직렬화하지 않음. `Page<T>`·`CursorParams`를 `hyve-api` 소유로 옮김. `hyve`가 프레임워크 실행 파일에 제공 단계를 묻는 절차 추가 (`01-dx-and-dsl.md` §2, `02-architecture.md` §2.4, `03-adapters-and-pipeline.md` §3)
+- **포크 착수 방식 적용** (2026-11-24): `rkyv`·`winnow`·`ariadne`·`bytemuck`은 정확한 버전 고정 의존, `hyve-state`와 `Ulid`·`SharedRingBuf`는 레퍼런스를 둔 자체 구현, JSON은 `serde_json` 대신 `#[model]`이 생성하는 자체 코덱. 확정된 포크 스택의 실행 방식을 바꾼 것 (`02-architecture.md` §3)
+- **`#[model]` 입력 범위와 시그널 표면 확정(제안)** (2026-11-24, 미정 #2 해소): `#[model]`은 이름 있는 필드의 구조체(제네릭 포함)와 단위 배리언트만 가진 enum을 받고, 그 밖은 컴파일 타임 진단. enum의 JSON 값은 배리언트 이름의 `snake_case` 문자열. 소유하지 않은 속성(`#[table]`, `#[pk]` 등)은 그대로 통과. `Signal<T>`·`Memo<T>`는 `T: Clone`일 때 `sig()`로 읽을 수 있고(호출식이 `Deref` 대상 `dyn Fn() -> T`로 자동 역참조되는 것을 이용), `Signal<T>`는 `+=` 같은 복합 대입과 `Signal<bool>::toggle()`을 제공. `SharedRingBuf<T>`는 `T: bytemuck::Pod`인 덮어쓰기 링이며 `read_latest_snapshot(&mut [T]) -> usize`로 최신 샘플을 찢어짐 없이 복사 (`02-architecture.md` §2.1, §2.2)

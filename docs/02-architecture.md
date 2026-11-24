@@ -37,6 +37,7 @@ hyve/
 - **식별자**: `Id<T>`는 대상 타입으로 구분되는 `Ulid` 래퍼이며 `Id::new()`로 새 값을 만듭니다. `Ulid`는 ULID 규격(48비트 밀리초 타임스탬프 + 80비트 난수)을 따르고, 난수부는 암호학적 난수원에서 채웁니다(ULID 규격, 2026-11-24 확인: https://github.com/ulid/spec). 그래도 ID는 식별용이며 세션·토큰 같은 자격 증명으로 쓰지 않습니다(`hyperish/docs` `02-core-contracts.md` §6). 규격상 같은 밀리초 안의 정렬 순서는 보장되지 않으므로, 한 프로세스 안에서는 규격의 단조 증가 방식을 적용합니다(제안).
 - **스코프**: 스코프를 만들고, 값을 제공하고, 해제하는 API는 `hyve-core`의 공개 인터페이스이며 `orbic`(앱·컴포넌트·요청)과 `serge`(앱·기능·뷰)가 이를 호출해 `Ctx<T>`를 채웁니다. 조립 규칙 자체는 각 레포가 가집니다(제안).
 - **취소**: `CancellationToken`은 부모의 취소가 자식에게 전파되는 트리이며, 폴링과 대기(`await`) 양쪽으로 관찰할 수 있습니다(제안).
+- `SharedRingBuf<T>`(`T: bytemuck::Pod`)는 최신 샘플을 덮어쓰는 링이며, 읽는 쪽은 `read_latest_snapshot(&mut [T]) -> usize`로 가장 최근 샘플부터 채울 수 있는 만큼 찢어짐 없이 복사합니다. 핸들은 복제해 여러 곳에서 읽을 수 있습니다(제안, 2026-11-24).
 - 인프로세스 스레드 간 및 로컬 멀티프로세스 공유 메모리(`shm`/`mmap`) 간에 대용량·120fps 실시간 스트림을 락·복사 없이 주고받는 **Lock-Free SPSC/MPMC 공용 링 버퍼(`SharedRingBuf<T>`)** 프리미티브를 제공합니다. OS 공유 메모리(`shm`) 모드는 Rust 메모리 안전성(`unsafe` 근거 주석 필수)을 위해 다음 계약을 강제합니다:
   - **레이아웃 제약**: `#[repr(C)]` 고정 크기 POD(`Pod + Zeroable`) 타입 또는 검증된 바이트 프레이밍 전용이며, 힙 포인터(`String`, `Vec` 등)나 레이아웃 미보장 타입의 직접 배치를 컴파일 타임에 금지합니다.
   - **찢어짐(Tearing) 방지**: Producer가 고속으로 덮어쓰는 환경에서 불안정한 원시 슬라이스 대여를 허용하지 않고, 스냅샷 복사(seqlock/더블·트리플 버퍼) 또는 명시적 읽기 가드(`ReadGuard`) 모델을 강제합니다.
@@ -50,6 +51,7 @@ hyve/
 - 읽기 참조 대여와 명시적 변경 요청 규칙을 타입 수준에서 강제합니다.
 - 시그널·메모·이펙트는 생성된 소유 스코프(컴포넌트·기능·요청)에 속하고, 스코프가 해제되면 아레나 슬롯을 반환합니다. 해제된 핸들 접근은 조용한 오동작이 아니라 감지되는 실패여야 합니다.
 - `memo`는 읽기 전용 파생 값(`Memo<T>`)을 돌려주며 호출자가 직접 쓸 수 없습니다. 한 번의 변경에 대해 이펙트는 의존 경로가 여러 갈래여도 한 번만 실행됩니다. `update`·`with` 클로저 안에서 다른 시그널을 읽고 쓰는 것은 허용되며 패닉이 아닙니다(제안). 소유 스코프 밖에서 만든 시그널은 프로세스 수명의 루트 스코프에 속합니다(제안).
+- **읽기·쓰기 표면 (제안, 2026-11-24)**: `get()`·`set()`·`update()`·`with()`에 더해, `T: Clone`이면 `sig()`로 읽습니다(`serge`의 `ui!` 문법 2번과 같은 표기). `Signal<T>`는 `+=` 같은 복합 대입과 `Signal<bool>::toggle()`을 제공합니다. Phase 1의 아레나는 스레드 로컬이며, 핸들을 만든 스레드가 아닌 곳에서 접근하면 감지되는 실패(패닉)입니다. 멀티스레드 공유 스토리지는 Phase 2에서 붙입니다.
 
 ### 2.3 `hyve-serde` · `hyve-validate` · `hyve-parser` (직렬화·검증·파서·범용 스키마)
 - **단일 내부 바이너리 와이어 포맷 (`rkyv` 확정, 2026-11-19)**: 내부 직렬화는 `rkyv`(MIT, `bytecheck` 검증 기반 제로카피 역직렬화)를 단일 기준으로 사용해 Tier 2 Shm IPC·MSA·SSR 상태·고속 Dual-Rail을 한 코덱으로 통합하고, JSON(`serde_json`) 등 외부 표준 포맷은 어댑터로 분리합니다.
@@ -90,4 +92,14 @@ hyve/
 | `hyve-diagnostics` | `ariadne` (`0.6.0`, `MIT`) | 컴파일 타임/런타임 스팬·수정 가이드 출력 경량화 |
 | `hyve-core` | `ulid` (`3.0.0`, `MIT`), `bytemuck` (`1.25.2`, `MIT/Apache-2.0/Zlib`), `rtrb` (`0.4.1`, `MIT OR Apache-2.0`) / `crossbeam-queue` (`0.3.14`, `MIT/Apache-2.0`) | `#[repr(C)]` POD 검증 + `SharedRingBuf<T>` 인프로세스/OS `shm` 안전 스냅샷·`ReadGuard` 직결 |
 
-외부 의존성(포크하지 않음, 2026-11-24 `cargo info` 확인): `tokio` (`1.54.1`, `MIT`), `syn` (`3.0.10`, `MIT OR Apache-2.0`), `quote` (`1.0.47`, `MIT OR Apache-2.0`), `proc-macro2` (`1.0.107`, `MIT OR Apache-2.0`), `bytecheck` (`0.8.3`, `MIT`), 컴파일 실패 테스트용 `trybuild` (`1.0.125`, `MIT OR Apache-2.0`). 이 목록에 없는 의존성은 `hyperish/docs` `05-development-rules.md` §7의 외부 의존성 규칙에 따라 추가 기록합니다.
+**착수 방식 (2026-11-24, `hyperish/docs` `05-development-rules.md` §7의 8번 규칙 적용)**
+
+| 모듈 | 방식 | 근거 |
+|---|---|---|
+| `hyve-serde` | `rkyv` `=0.8.18` 고정 의존(`default-features = false`, `std`·`bytecheck`·포맷 제어 조합) | 개조 방향(`#[model]` 직결, 검증된 제로카피 접근)이 공개 API로 됨. derive가 참조하는 경로를 `hyve-serde` 재수출로 돌리고 워크스페이스의 `unsafe_code = "deny"` 아래에서 통과하는 것을 확인함 |
+| `hyve-serde` (JSON) | `serde_json` 대신 자체 코덱 | §2.3의 JSON 규칙(손실 없는 수 표현, 입력 한도, `camelCase`)은 타입 단위로 두 레일에 똑같이 적용돼야 함. `serde` derive와 `serde_json`으로는 수 처리를 모든 경로에서 가로채는 래퍼가 필요하므로, `#[model]`이 인코더·디코더를 직접 생성하는 한 단계 경로가 더 적은 변환과 의존으로 끝남. 확정된 "외부 어댑터 `serde_json`"을 바꾼 것 |
+| `hyve-state` | `reactive_graph`를 레퍼런스로 삼은 자체 구현 | 개조 방향이 런타임과 아레나를 통째로 바꾸는 것이라 원본을 감쌀 수 없음. 원본은 프리릴리스(`0.3.0-rc1`)이고 `rust-version`이 `1.88`이며 비동기 런타임 계열 의존(`any_spawner`, `futures`, `async-lock`)과 `slotmap`(`Zlib`)을 끌어옴(2026-11-24 `cargo tree` 확인) |
+| `hyve-core` | `Ulid`와 `SharedRingBuf<T>`는 자체 구현, `bytemuck` `=1.25.2` 고정 의존 | `ulid` 크레이트는 `rand`를 끌어오고 규격이 작음. `rtrb`·`crossbeam-queue`는 소비형 큐라서, 최신 샘플을 덮어쓰고 찢어짐 없이 스냅샷하는 `SharedRingBuf`의 의미와 다름. 두 크레이트는 레퍼런스로만 씀 |
+| `hyve-parser`, `hyve-diagnostics` | `winnow` `=1.0.5`, `ariadne` `=0.6.0` 고정 의존 | 개조 방향이 공개 API로 됨 |
+
+외부 의존성(포크하지 않음, 2026-11-24 `cargo info` 확인): `tokio` (`1.54.1`, `MIT`), `syn` (`3.0.10`, `MIT OR Apache-2.0`), `quote` (`1.0.47`, `MIT OR Apache-2.0`), `proc-macro2` (`1.0.107`, `MIT OR Apache-2.0`), `bytecheck` (`0.8.3`, `MIT`), 컴파일 실패 테스트용 `trybuild` (`1.0.125`, `MIT OR Apache-2.0`, `rust-version` `1.88`이라 최신 툴체인 CI에서만 실행), 난수 `getrandom` (`0.4.3`, `MIT OR Apache-2.0`, `wasm32-unknown-unknown`에서는 `wasm_js` 피처), 브라우저 시계 `js-sys` (`0.3.107`, `MIT OR Apache-2.0`, `wasm32-unknown-unknown` 전용), `wasm32` 테스트용 `wasm-bindgen-test` (`0.3.80`, `MIT OR Apache-2.0`). 이 목록에 없는 의존성은 `hyperish/docs` `05-development-rules.md` §7의 외부 의존성 규칙에 따라 추가 기록합니다.
