@@ -1,5 +1,6 @@
 //! Binary (fast-rail) codec on top of `rkyv`.
 
+use std::num::NonZeroUsize;
 use std::ops::Deref;
 
 use rkyv::api::high::{HighDeserializer, HighSerializer, HighValidator};
@@ -7,9 +8,18 @@ use rkyv::bytecheck::CheckBytes;
 use rkyv::rancor::Error as RkyvError;
 use rkyv::ser::allocator::ArenaHandle;
 use rkyv::util::AlignedVec;
+use rkyv::validation::Validator;
+use rkyv::validation::archive::ArchiveValidator;
+use rkyv::validation::shared::SharedValidator;
 use rkyv::{Archive, Deserialize, Portable, Serialize};
 
 use crate::{DecodeError, EncodeError};
+
+/// Deepest nesting of out-of-line data (`Vec`, `String`, `Box`, nested
+/// `Value`s, …) accepted from untrusted bytes; the same bound as the JSON
+/// reader's default depth. Validation of deeper archives fails instead of
+/// exhausting the stack.
+pub const MAX_BINARY_DEPTH: usize = 128;
 
 /// Alignment of encoded buffers (`rkyv::util::AlignedVec`'s default).
 const ALIGN: usize = 16;
@@ -78,8 +88,11 @@ where
     }
 
     fn from_binary(bytes: &[u8]) -> Result<Self, DecodeError> {
-        with_aligned(bytes, |b| rkyv::from_bytes::<T, RkyvError>(b))
-            .map_err(|e| DecodeError::new(format!("invalid binary payload: {e}"), "$", None))
+        with_aligned(bytes, |b| {
+            let archived = checked_access::<T::Archived>(b)?;
+            rkyv::deserialize::<T, RkyvError>(archived)
+        })
+        .map_err(|e| DecodeError::new(format!("invalid binary payload: {e}"), "$", None))
     }
 }
 
@@ -90,8 +103,21 @@ where
     T: Archive,
     T::Archived: Portable + for<'a> CheckBytes<HighValidator<'a, RkyvError>>,
 {
-    rkyv::access::<T::Archived, RkyvError>(bytes)
+    checked_access::<T::Archived>(bytes)
         .map_err(|e| DecodeError::new(format!("invalid binary payload: {e}"), "$", None))
+}
+
+/// `rkyv`'s high-level validator, but with a depth bound ([`MAX_BINARY_DEPTH`]);
+/// the high-level API validates without one.
+fn checked_access<'a, A>(bytes: &'a [u8]) -> Result<&'a A, RkyvError>
+where
+    A: Portable + CheckBytes<HighValidator<'a, RkyvError>>,
+{
+    let mut validator = Validator::new(
+        ArchiveValidator::with_max_depth(bytes, NonZeroUsize::new(MAX_BINARY_DEPTH)),
+        SharedValidator::new(),
+    );
+    rkyv::api::access_with_context::<A, _, RkyvError>(bytes, &mut validator)
 }
 
 fn with_aligned<R>(bytes: &[u8], f: impl FnOnce(&[u8]) -> R) -> R {

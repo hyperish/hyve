@@ -1,6 +1,6 @@
 //! Streaming JSON writer.
 
-use std::fmt::Write as _;
+use std::fmt::{self, Write as _};
 
 /// Largest integer magnitude a JSON number carries exactly (2^53).
 pub(crate) const EXACT_INT: u128 = 1 << 53;
@@ -110,6 +110,14 @@ impl JsonWriter {
         }
     }
 
+    /// An integer written as an exact JSON number regardless of magnitude
+    /// (for schemaless [`Value`](hyve_core::Value)s, which have no schema to
+    /// mark a string as an integer).
+    pub fn exact_int(&mut self, v: i128) {
+        self.before_value();
+        let _ = write!(self.out, "{v}");
+    }
+
     /// An unsigned integer (decimal string when v > 2^53).
     pub fn uint(&mut self, v: u128) {
         self.before_value();
@@ -132,13 +140,12 @@ impl JsonWriter {
                 "\"-Infinity\""
             });
         } else {
-            let a = v.abs();
-            // Shortest round-trip digits; exponent form only for extreme magnitudes.
-            if a == 0.0 || (1e-5..1e16).contains(&a) {
-                let _ = write!(self.out, "{v}");
-            } else {
-                let _ = write!(self.out, "{v:e}");
-            }
+            write_float(
+                &mut self.out,
+                v.abs(),
+                format_args!("{v}"),
+                format_args!("{v:e}"),
+            );
         }
     }
 
@@ -148,12 +155,27 @@ impl JsonWriter {
             return self.float(v as f64);
         }
         self.before_value();
-        let a = v.abs();
-        if a == 0.0 || (1e-5..1e16).contains(&a) {
-            let _ = write!(self.out, "{v}");
-        } else {
-            let _ = write!(self.out, "{v:e}");
+        write_float(
+            &mut self.out,
+            f64::from(v.abs()),
+            format_args!("{v}"),
+            format_args!("{v:e}"),
+        );
+    }
+}
+
+/// Shortest round-trip digits; exponent form only for extreme magnitudes. The
+/// text always has a fraction or an exponent, so a float stays a float when
+/// read back schemalessly (`1.0`, not `1`).
+fn write_float(out: &mut String, abs: f64, plain: fmt::Arguments<'_>, exp: fmt::Arguments<'_>) {
+    let start = out.len();
+    if abs == 0.0 || (1e-5..1e16).contains(&abs) {
+        let _ = out.write_fmt(plain);
+        if !out[start..].contains('.') {
+            out.push_str(".0");
         }
+    } else {
+        let _ = out.write_fmt(exp);
     }
 }
 
@@ -228,7 +250,7 @@ mod tests {
         w.end_array();
         assert_eq!(
             w.as_str(),
-            r#"[9007199254740992,"9007199254740993","18446744073709551615",0.1,3,1e300,-0,"NaN","-Infinity",0.1]"#
+            r#"[9007199254740992,"9007199254740993","18446744073709551615",0.1,3.0,1e300,-0.0,"NaN","-Infinity",0.1]"#
         );
     }
 }

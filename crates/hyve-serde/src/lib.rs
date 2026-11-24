@@ -19,7 +19,7 @@ mod error;
 mod fingerprint;
 pub mod json;
 
-pub use binary::{AlignedBytes, Binary, access};
+pub use binary::{AlignedBytes, Binary, MAX_BINARY_DEPTH, access};
 pub use error::{DecodeError, EncodeError};
 pub use fingerprint::{FORMAT_FINGERPRINT, Fingerprint, fnv1a, mix};
 pub use json::{Json, JsonLimits, JsonReader, JsonWriter, from_json, from_json_with, to_json};

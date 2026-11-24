@@ -19,7 +19,9 @@ macro_rules! signed {
         }
     )*};
 }
-signed!(i8, i16, i32, i64, i128, isize);
+// `usize`/`isize` are not wire types: their binary width (32 bits, fixed by
+// the family format control) differs from native 64-bit targets.
+signed!(i8, i16, i32, i64, i128);
 
 macro_rules! unsigned {
     ($($t:ty),*) => {$(
@@ -32,7 +34,7 @@ macro_rules! unsigned {
         }
     )*};
 }
-unsigned!(u8, u16, u32, u64, u128, usize);
+unsigned!(u8, u16, u32, u64, u128);
 
 impl Json for f64 {
     fn encode_json(&self, w: &mut JsonWriter) {
@@ -112,6 +114,9 @@ impl<T: Json> Json for Option<T> {
         } else {
             T::decode_json(r).map(Some)
         }
+    }
+    fn missing() -> Option<Self> {
+        Some(None)
     }
 }
 
@@ -236,8 +241,10 @@ impl Json for Value {
         match self {
             Value::Null => w.null(),
             Value::Bool(b) => w.bool(*b),
-            Value::Int(i) => w.int(*i as i128),
-            Value::UInt(u) => w.uint(*u as u128),
+            // Schemaless: integers stay exact JSON numbers so the variant
+            // survives a round trip (`Int` up to `i64::MAX`, `UInt` above).
+            Value::Int(i) => w.exact_int(*i as i128),
+            Value::UInt(u) => w.exact_int(*u as i128),
             Value::Float(f) => w.float(*f),
             Value::String(s) => w.string(s),
             Value::List(items) => {
@@ -332,19 +339,27 @@ mod tests {
         ]));
         rt(Ulid::new());
         rt(Timestamp::now());
-        // Schemaless `Value`: an integer beyond 2^53 is written as a string and
-        // reads back as `Value::String` (typed fields read it back exactly).
-        let mut big = Value::Null;
-        big.insert("big", u64::MAX);
-        assert_eq!(
-            from_json::<Value>(&to_json(&big)).unwrap().get("big"),
-            Some(&Value::String(u64::MAX.to_string()))
-        );
+        // Schemaless `Value` keeps its variants: exact integers, floats with a
+        // fraction.
         let mut v = Value::Null;
-        v.insert("big", 1u64 << 53);
+        v.insert("big", u64::MAX);
+        v.insert("min", i64::MIN);
+        v.insert("one", 1.0);
+        v.insert("tiny", 1e-300);
         v.insert("list", vec![1i64, -2]);
         v.insert("f", 1.5);
         rt(v);
+    }
+
+    #[test]
+    fn typed_big_integers_travel_as_strings_and_floats_keep_a_fraction() {
+        assert_eq!(to_json(&(1u64 << 53)), "9007199254740992");
+        assert_eq!(to_json(&((1u64 << 53) + 1)), "\"9007199254740993\"");
+        assert_eq!(to_json(&1.0f64), "1.0");
+        assert_eq!(to_json(&2.5f32), "2.5");
+        assert_eq!(to_json(&1e20f64), "1e20");
+        assert_eq!(from_json::<Value>("1.0").unwrap(), Value::Float(1.0));
+        assert_eq!(from_json::<f64>("1").unwrap(), 1.0);
     }
 
     #[test]

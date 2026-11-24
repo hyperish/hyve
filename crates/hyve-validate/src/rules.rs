@@ -15,6 +15,11 @@ use hyve_core::Value;
 use crate::{FieldPath, Violation, Violations};
 
 /// Things with a length for the `len` rule.
+#[diagnostic::on_unimplemented(
+    message = "`#[validate(len = ...)]` does not apply to `{Self}`",
+    label = "this field has no length",
+    note = "`len` checks strings, lists, arrays and maps (or an `Option` of one); use `range` for numbers"
+)]
 pub trait HasLen {
     /// The length, or `None` to skip the rule (an absent `Option`).
     fn rule_len(&self) -> Option<usize>;
@@ -141,6 +146,11 @@ pub fn len<V: HasLen + ?Sized, R: RangeBounds<usize>>(
 }
 
 /// Values the `range` rule can check, resolving the bound type from the field.
+#[diagnostic::on_unimplemented(
+    message = "`#[validate(range = ...)]` does not apply to `{Self}`",
+    label = "this field is not a number",
+    note = "`range` checks integers and floats (or an `Option` of one), with bounds of the same type; use `len` for strings and lists"
+)]
 pub trait RangeValue<T> {
     /// The value to compare, or `None` to skip (an absent `Option`).
     fn range_value(&self) -> Option<&T>;

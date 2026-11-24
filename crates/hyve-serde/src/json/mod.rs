@@ -46,12 +46,24 @@ impl Default for JsonLimits {
 }
 
 /// A type with a JSON representation.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` has no JSON codec, so it cannot appear in a `#[model]` or `#[server]` signature",
+    label = "not a wire type",
+    note = "declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)"
+)]
 pub trait Json: Sized {
     /// Writes `self` as one JSON value.
     fn encode_json(&self, w: &mut JsonWriter);
 
     /// Reads one JSON value.
     fn decode_json(r: &mut JsonReader<'_>) -> Result<Self, DecodeError>;
+
+    /// The value of an absent object field, or `None` if the field is
+    /// required. `Option<T>` returns `Some(None)`: optional fields may be
+    /// omitted (adding one is backward compatible).
+    fn missing() -> Option<Self> {
+        None
+    }
 }
 
 /// Encodes `value` as a JSON string.

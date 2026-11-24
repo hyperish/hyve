@@ -10,7 +10,7 @@ use hyve_serde::{AlignedBytes, Binary, access};
 struct Project {
     id: Id<Project>,
     title: String,
-    count: usize,
+    count: u32,
     tags: Vec<String>,
     created_at: Timestamp,
     meta: Value,
@@ -104,4 +104,43 @@ fn print_reference() {
         &*bytes,
     )
     .unwrap();
+}
+
+#[test]
+fn deep_nesting_is_rejected_without_exhausting_the_stack() {
+    fn nested(depth: usize) -> Value {
+        let mut v = Value::Null;
+        for _ in 0..depth {
+            v = Value::List(vec![v]);
+        }
+        v
+    }
+    fn flatten(mut v: Value) {
+        // Iterative drop (a recursive drop of a deep value needs a deep stack).
+        while let Value::List(mut items) = v {
+            v = items.pop().unwrap_or(Value::Null);
+        }
+    }
+    fn on_stack<R: Send + 'static>(stack: usize, f: impl FnOnce() -> R + Send + 'static) -> R {
+        std::thread::Builder::new()
+            .stack_size(stack)
+            .spawn(f)
+            .unwrap()
+            .join()
+            .expect("stack overflow")
+    }
+
+    // Producing a hostile archive needs a big stack (the encoder recurses).
+    let bytes = on_stack(256 << 20, || {
+        let deep = nested(20_000);
+        let bytes = deep.to_binary().unwrap();
+        flatten(deep);
+        bytes
+    });
+    // Decoding it on an ordinary 2 MiB stack fails cleanly.
+    let result = on_stack(2 << 20, move || Value::from_binary(&bytes).map(flatten));
+    assert!(result.is_err());
+
+    let ok = nested(hyve_serde::MAX_BINARY_DEPTH / 2);
+    assert_eq!(Value::from_binary(&ok.to_binary().unwrap()).unwrap(), ok);
 }
