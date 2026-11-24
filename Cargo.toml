@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/hyve-api",
     "crates/hyve-core",
     "crates/hyve-diagnostics",
     "crates/hyve-parser",
@@ -19,6 +20,7 @@ authors = ["Hyperish Contributors"]
 
 [workspace.dependencies]
 # Internal crates: path + exact version (hyperish/docs 05-development-rules.md §5).
+hyve-api = { path = "crates/hyve-api", version = "=0.1.0-alpha.0" }
 hyve-core = { path = "crates/hyve-core", version = "=0.1.0-alpha.0" }
 hyve-diagnostics = { path = "crates/hyve-diagnostics", version = "=0.1.0-alpha.0" }
 hyve-parser = { path = "crates/hyve-parser", version = "=0.1.0-alpha.0" }

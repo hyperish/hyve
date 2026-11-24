@@ -13,7 +13,9 @@
 pub mod rules;
 mod schema;
 
-pub use schema::{Constraint, Definition, FieldSchema, Schema, SchemaNode, SchemaRegistry};
+pub use schema::{
+    Constraint, Definition, FieldSchema, Schema, SchemaNode, SchemaRegistry, generic_name, label,
+};
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;

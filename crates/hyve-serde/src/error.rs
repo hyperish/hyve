@@ -75,6 +75,11 @@ impl std::error::Error for DecodeError {}
 pub struct EncodeError(pub(crate) String);
 
 impl EncodeError {
+    /// An encode error with `message` (for codecs outside this crate).
+    pub fn new(message: impl Into<String>) -> Self {
+        EncodeError(message.into())
+    }
+
     /// What went wrong.
     pub fn message(&self) -> &str {
         &self.0

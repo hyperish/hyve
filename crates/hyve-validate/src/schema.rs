@@ -114,16 +114,19 @@ impl SchemaRegistry {
 
     /// Registers `T` under `short_name` (made unique if another type already
     /// uses it) and returns a reference to it. `build` runs only the first time.
+    /// Generic types fold their arguments into the name with
+    /// [`generic_name`] (`Page<Project>` → `Page_Project`).
     pub fn define<T: ?Sized + 'static>(
         &mut self,
-        short_name: &'static str,
+        short_name: impl Into<String>,
         build: impl FnOnce(&mut SchemaRegistry) -> Definition,
     ) -> SchemaNode {
         let key = type_name::<T>();
         if let Some(name) = self.names.get(key) {
             return SchemaNode::Ref(name.clone());
         }
-        let mut name = short_name.to_owned();
+        let short_name = short_name.into();
+        let mut name = short_name.clone();
         let mut n = 2;
         while self.definitions.contains_key(&name) {
             name = format!("{short_name}{n}");
@@ -152,6 +155,46 @@ impl SchemaRegistry {
     pub fn get(&self, name: &str) -> Option<&Definition> {
         self.definitions.get(name).and_then(Option::as_ref)
     }
+}
+
+/// A name for a schema node, used to name generic definitions.
+pub fn label(node: &SchemaNode) -> String {
+    match node {
+        SchemaNode::Null => "Null".into(),
+        SchemaNode::Bool => "Bool".into(),
+        SchemaNode::Integer { bits, signed } => {
+            format!("{}{bits}", if *signed { 'I' } else { 'U' })
+        }
+        SchemaNode::Float { bits } => format!("F{bits}"),
+        SchemaNode::String { format: None } => "String".into(),
+        SchemaNode::String {
+            format: Some("ulid"),
+        } => "Ulid".into(),
+        SchemaNode::String {
+            format: Some("date-time"),
+        } => "Timestamp".into(),
+        SchemaNode::String {
+            format: Some("char"),
+        } => "Char".into(),
+        SchemaNode::String {
+            format: Some(other),
+        } => other.to_string(),
+        SchemaNode::List { items, .. } => format!("List_{}", label(items)),
+        SchemaNode::Map { values } => format!("Map_{}", label(values)),
+        SchemaNode::Nullable(inner) => format!("Optional_{}", label(inner)),
+        SchemaNode::Any => "Value".into(),
+        SchemaNode::Ref(name) => name.clone(),
+    }
+}
+
+/// `base` followed by the labels of the type arguments (`Page_Project`).
+pub fn generic_name(base: &str, args: &[SchemaNode]) -> String {
+    let mut name = base.to_owned();
+    for a in args {
+        name.push('_');
+        name.push_str(&label(a));
+    }
+    name
 }
 
 /// Types that can describe their shape.
@@ -313,5 +356,15 @@ mod tests {
             )
         );
         assert!(<Option<u8>>::optional());
+    }
+
+    #[test]
+    fn generic_names_fold_arguments() {
+        let mut r = SchemaRegistry::new();
+        let args = [
+            r.schema_of::<Option<u32>>(),
+            SchemaNode::Ref("Project".into()),
+        ];
+        assert_eq!(generic_name("Page", &args), "Page_Optional_U32_Project");
     }
 }

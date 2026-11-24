@@ -8,11 +8,12 @@
 //! Ranges are ordinary Rust ranges (`1..=80`, `1..80`, `..=80`, `1..`).
 
 use std::collections::{BTreeMap, HashMap};
+use std::marker::PhantomData;
 use std::ops::{Bound, RangeBounds};
 
 use hyve_core::Value;
 
-use crate::{FieldPath, Violation, Violations};
+use crate::{Constraint, FieldPath, Violation, Violations};
 
 /// Things with a length for the `len` rule.
 #[diagnostic::on_unimplemented(
@@ -241,6 +242,34 @@ pub fn range<T: RangeBound, V: RangeValue<T> + ?Sized, R: RangeBounds<T>>(
     });
 }
 
+/// The schema constraint of `len = <range>`.
+pub fn len_constraint<R: RangeBounds<usize>>(range: R) -> Constraint {
+    let (min, max) = len_bounds(&range);
+    Constraint::Len { min, max }
+}
+
+/// The schema constraint of `range = <range>` on a field of type `V`
+/// (`PhantomData::<fn(&V)>` names the field type so the bound type is
+/// inferred the same way as for [`range`]).
+pub fn range_constraint<T: RangeBound, V: RangeValue<T> + ?Sized, R: RangeBounds<T>>(
+    _field: PhantomData<fn(&V)>,
+    range: R,
+) -> Constraint {
+    let bound = |b: Bound<&T>| match b {
+        Bound::Included(v) => (Some(v.to_value()), false),
+        Bound::Excluded(v) => (Some(v.to_value()), true),
+        Bound::Unbounded => (None, false),
+    };
+    let (min, exclusive_min) = bound(range.start_bound());
+    let (max, exclusive_max) = bound(range.end_bound());
+    Constraint::Range {
+        min,
+        exclusive_min,
+        max,
+        exclusive_max,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +292,35 @@ mod tests {
             vec!["must be at most 2 items long (got 3)"]
         );
         assert!(check(|p, o| len(&None::<String>, 1..=3, p, o)).is_empty());
+    }
+
+    #[test]
+    fn constraints_for_schemas() {
+        assert_eq!(
+            len_constraint(1..=80),
+            Constraint::Len {
+                min: Some(1),
+                max: Some(80)
+            }
+        );
+        assert_eq!(
+            range_constraint(PhantomData::<fn(&Option<u32>)>, 30..=240),
+            Constraint::Range {
+                min: Some(Value::Int(30)),
+                exclusive_min: false,
+                max: Some(Value::Int(240)),
+                exclusive_max: false
+            }
+        );
+        assert_eq!(
+            range_constraint(PhantomData::<fn(&f64)>, 0.0..1.0),
+            Constraint::Range {
+                min: Some(Value::Float(0.0)),
+                exclusive_min: false,
+                max: Some(Value::Float(1.0)),
+                exclusive_max: true
+            }
+        );
     }
 
     #[test]
