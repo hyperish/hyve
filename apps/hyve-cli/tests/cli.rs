@@ -68,9 +68,11 @@ fn help_and_version() {
         String::from_utf8_lossy(&o.stdout).trim(),
         concat!("hyve ", env!("CARGO_PKG_VERSION"))
     );
-    assert!(
-        String::from_utf8_lossy(&hyve(&d, &["--help"]).stdout).contains("Usage: hyve <command>")
-    );
+    let help = String::from_utf8_lossy(&hyve(&d, &["--help"]).stdout).into_owned();
+    assert!(help.contains("Usage: hyve <command>"), "{help}");
+    // Only `lint` is unimplemented; the help must not say otherwise of the
+    // commands that work.
+    assert!(!help.contains("not in this release"), "{help}");
     let o = hyve(&d, &[]);
     assert_eq!(o.status.code(), Some(2), "no command is a usage error");
 }

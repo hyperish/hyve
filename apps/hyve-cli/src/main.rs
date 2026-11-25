@@ -1,9 +1,10 @@
 //! `hyve` — the Hyperish workflow on top of Cargo (`docs/01-dx-and-dsl.md` §2).
 //!
-//! Phase 1 runs `test` and `build` on the enclosing Cargo workspace. The
-//! commands that need the framework stages (`hyve-orbic`, `hyve-serge`) or
-//! belong to later phases report that they are not implemented and exit
-//! with [`EXIT_NOT_IMPLEMENTED`]; nothing unimplemented ends in success.
+//! Phase 1 runs `test` and `build` on the enclosing Cargo workspace, runs
+//! the frameworks' stages (`hyve-orbic`, `hyve-serge`) for `codegen`,
+//! `build` and `preview`, and creates projects with `init`. `lint` belongs
+//! to a later phase: it reports that it is not implemented and exits with
+//! [`EXIT_NOT_IMPLEMENTED`]; nothing unimplemented ends in success.
 //!
 //! Exit codes: `0` success, [`EXIT_FAILED`] the work failed (or the exit code
 //! of the `cargo` command it ran), [`EXIT_USAGE`] unknown command, option or
@@ -41,9 +42,9 @@ Commands:
                       build the workspace, optimized unless --debug (cargo build)
   codegen [--check]   run the frameworks' code generation stages
   init [--template fullstack|serge-app|orbic-service] [--force] [<path>]
-                      create a project (not in this release)
+                      create a project from a template (default fullstack)
   preview [--web] [--native]
-                      run with live reload (not in this release)
+                      run the frameworks' previews together; Ctrl-C stops all
   lint                lint the workspace (Phase 2)
 
 Options:
