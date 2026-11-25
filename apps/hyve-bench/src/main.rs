@@ -9,6 +9,10 @@
 //!   (encoding is the same call; decoding differs by the depth-bounded
 //!   validator and the copy of misaligned input).
 //! - `hyve-serde`'s JSON codec (`#[model]`) against `serde_json`.
+//! - `hyve-core`'s `Ulid` against `ulid` `3.0.0` (generation, encoding,
+//!   parsing) and its `SharedRingBuf` against `crossbeam-queue`'s
+//!   `ArrayQueue` and `rtrb` (pushes alone and with a concurrent reader;
+//!   the originals are consuming queues, so the readers differ).
 //!
 //! Every scenario does the same work in each library: effect-run counts and
 //! final values are compared outside the timed region, and a mismatch
@@ -614,6 +618,329 @@ fn codecs() {
     );
 }
 
+// ------------------------------------------------------------- identifiers
+
+fn ids() {
+    use hyve_core::Ulid;
+    use std::sync::Mutex;
+
+    // Monotonic generation, as hyve does it for the whole process. The
+    // original's `Generator` is an owned value; shared by a process it sits
+    // behind a lock, so both forms are measured. Each run counts the IDs
+    // that were greater than the one before (all of them, or it aborts).
+    fn increasing<T: Ord + Copy>(n: u64, mut next: impl FnMut() -> T) -> (Duration, Check) {
+        let mut prev = next();
+        let mut up = 0u64;
+        let t = Instant::now();
+        for _ in 0..n {
+            let id = black_box(next());
+            up += u64::from(id > prev);
+            prev = id;
+        }
+        (t.elapsed(), (n, up))
+    }
+    static SHARED: Mutex<ulid::Generator> = Mutex::new(ulid::Generator::new());
+    scenario(
+        "ULID generate, monotonic",
+        1_000_000,
+        "id",
+        &[
+            run("hyve-core Ulid::new (process-wide)", |n| {
+                increasing(n, || Ulid::new().to_u128())
+            }),
+            run("ulid Generator (owned, &mut)", |n| {
+                let mut g = ulid::Generator::new();
+                increasing(n, move || g.generate().unwrap().0)
+            }),
+            run("ulid Generator behind a Mutex", |n| {
+                increasing(n, || SHARED.lock().unwrap().generate().unwrap().0)
+            }),
+        ],
+    );
+
+    // The same 1000 values through both encoders and parsers.
+    let mut g = ulid::Generator::new();
+    let values: Vec<u128> = (0..1000).map(|_| g.generate().unwrap().0).collect();
+    let texts: Vec<String> = values
+        .iter()
+        .map(|v| Ulid::from_u128(*v).to_string())
+        .collect();
+    for (v, s) in values.iter().zip(&texts) {
+        assert_eq!(*s, ulid::Ulid(*v).to_string(), "the same text");
+        assert_eq!(
+            s.parse::<Ulid>().unwrap().to_u128(),
+            *v,
+            "hyve parses it back"
+        );
+        assert_eq!(
+            ulid::Ulid::from_string(s).unwrap().0,
+            *v,
+            "ulid parses it back"
+        );
+    }
+    fn each<T>(
+        n: u64,
+        len: usize,
+        mut f: impl FnMut(usize) -> T,
+        check: impl Fn(&T) -> u64,
+    ) -> (Duration, Check) {
+        let mut sum = 0u64;
+        let t = Instant::now();
+        for i in 0..n as usize {
+            sum = sum.wrapping_add(check(&black_box(f(i % len))));
+        }
+        (t.elapsed(), (n, sum))
+    }
+    let (v1, v2) = (values.clone(), values);
+    scenario(
+        "ULID encode (26 chars, no allocation)",
+        1_000_000,
+        "id",
+        &[
+            run("hyve-core Ulid::encode", move |n| {
+                each(
+                    n,
+                    v1.len(),
+                    |i| Ulid::from_u128(v1[i]).encode(),
+                    |b| u64::from(b[25]),
+                )
+            }),
+            run("ulid Ulid::array_to_str", move |n| {
+                each(
+                    n,
+                    v2.len(),
+                    |i| {
+                        let mut buf = [0u8; 26];
+                        ulid::Ulid(v2[i]).array_to_str(&mut buf);
+                        buf
+                    },
+                    |b| u64::from(b[25]),
+                )
+            }),
+        ],
+    );
+    let (t1, t2) = (texts.clone(), texts);
+    scenario(
+        "ULID parse",
+        1_000_000,
+        "id",
+        &[
+            run("hyve-core str::parse::<Ulid>", move |n| {
+                each(
+                    n,
+                    t1.len(),
+                    |i| t1[i].parse::<Ulid>().unwrap().to_u128(),
+                    |v| *v as u64,
+                )
+            }),
+            run("ulid Ulid::from_string", move |n| {
+                each(
+                    n,
+                    t2.len(),
+                    |i| ulid::Ulid::from_string(&t2[i]).unwrap().0,
+                    |v| *v as u64,
+                )
+            }),
+        ],
+    );
+}
+
+// ------------------------------------------------------------------- rings
+
+/// A 32-byte sample that knows when it is torn.
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+struct Sample {
+    seq: u64,
+    check: u64,
+    x: f32,
+    y: f32,
+    z: u32,
+    _pad: u32,
+}
+
+impl Sample {
+    fn new(seq: u64) -> Self {
+        Sample {
+            seq,
+            check: !seq,
+            x: seq as f32,
+            y: -(seq as f32),
+            z: seq as u32,
+            _pad: 0,
+        }
+    }
+    fn intact(&self) -> bool {
+        self.check == !self.seq && self.z == self.seq as u32
+    }
+}
+
+const RING: usize = 1024;
+
+fn rings() {
+    use bytemuck::Zeroable;
+    use hyve_core::SharedRingBuf;
+
+    // What the ring holds afterwards: how many samples and the sum of their
+    // sequence numbers (the latest `RING` of them in every library).
+    fn held(samples: impl Iterator<Item = Sample>) -> u64 {
+        samples.map(|s| s.seq).sum()
+    }
+    scenario(
+        "ring push, one thread (keeps the latest 1024)",
+        1_000_000,
+        "push",
+        &[
+            run("hyve-core SharedRingBuf::push", |n| {
+                let ring = SharedRingBuf::<Sample>::new(RING);
+                let t = Instant::now();
+                for i in 0..n {
+                    ring.push(black_box(Sample::new(i)));
+                }
+                let e = t.elapsed();
+                let mut out = vec![Sample::zeroed(); RING];
+                let k = ring.read_latest_snapshot(&mut out);
+                (e, (k as u64, held(out[..k].iter().copied())))
+            }),
+            run("crossbeam ArrayQueue::force_push", |n| {
+                let q = crossbeam_queue::ArrayQueue::new(RING);
+                let t = Instant::now();
+                for i in 0..n {
+                    black_box(q.force_push(black_box(Sample::new(i))));
+                }
+                let e = t.elapsed();
+                let k = q.len() as u64;
+                (e, (k, held(std::iter::from_fn(|| q.pop()))))
+            }),
+            run("rtrb push (pop the oldest when full)", |n| {
+                let (mut p, mut c) = rtrb::RingBuffer::new(RING);
+                let t = Instant::now();
+                for i in 0..n {
+                    if p.is_full() {
+                        black_box(c.pop().unwrap());
+                    }
+                    p.push(black_box(Sample::new(i))).unwrap();
+                }
+                let e = t.elapsed();
+                let k = c.slots() as u64;
+                (e, (k, held(std::iter::from_fn(|| c.pop().ok()))))
+            }),
+        ],
+    );
+
+    // No counterpart: the originals have no read that leaves the samples in
+    // place.
+    scenario(
+        "ring snapshot of the latest 64 (hyve only: the originals consume)",
+        1_000_000,
+        "snapshot",
+        &[run("hyve-core read_latest_snapshot", |n| {
+            let ring = SharedRingBuf::<Sample>::new(RING);
+            for i in 0..RING as u64 * 2 {
+                ring.push(Sample::new(i));
+            }
+            let mut out = [Sample::zeroed(); 64];
+            let mut sum = 0u64;
+            let t = Instant::now();
+            for _ in 0..n {
+                let k = ring.read_latest_snapshot(black_box(&mut out));
+                sum = sum.wrapping_add(k as u64 + out[0].seq);
+            }
+            (t.elapsed(), (n, sum))
+        })],
+    );
+
+    // A writer thread with a reader thread reading as fast as it can: the
+    // time is the writer's, per push. Readers do what each library offers
+    // (hyve copies the latest 64 in place; the queues pop). The check is the
+    // number of pushes and of torn samples a reader saw (0).
+    fn contended<R: Send + 'static>(
+        n: u64,
+        push: impl FnMut(u64),
+        reader: R,
+        read: fn(&mut R) -> (u64, u64),
+    ) -> (Duration, Check) {
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let handle = std::thread::spawn(move || {
+            let mut reader = reader;
+            let (mut seen, mut torn) = (0u64, 0u64);
+            while !stop2.load(Ordering::Relaxed) {
+                let (s, t) = read(&mut reader);
+                seen += s;
+                torn += t;
+            }
+            (seen, torn)
+        });
+        let mut push = push;
+        let t = Instant::now();
+        for i in 0..n {
+            push(i);
+        }
+        let e = t.elapsed();
+        stop.store(true, Ordering::Relaxed);
+        let (seen, torn) = handle.join().unwrap();
+        assert!(seen > 0, "the reader saw samples");
+        (e, (n, torn))
+    }
+    scenario(
+        "ring push with a concurrent reader (cap 1024)",
+        1_000_000,
+        "push",
+        &[
+            run("hyve-core push / read_latest_snapshot(64)", |n| {
+                let ring = SharedRingBuf::<Sample>::new(RING);
+                let reader = (ring.clone(), [Sample::zeroed(); 64]);
+                contended(
+                    n,
+                    move |i| ring.push(Sample::new(i)),
+                    reader,
+                    |(r, out)| {
+                        let k = r.read_latest_snapshot(out);
+                        (
+                            k as u64,
+                            out[..k].iter().filter(|s| !s.intact()).count() as u64,
+                        )
+                    },
+                )
+            }),
+            run("crossbeam force_push / pop", |n| {
+                let q = Arc::new(crossbeam_queue::ArrayQueue::new(RING));
+                let reader = q.clone();
+                contended(
+                    n,
+                    move |i| {
+                        black_box(q.force_push(Sample::new(i)));
+                    },
+                    reader,
+                    |q| match q.pop() {
+                        Some(s) => (1, u64::from(!s.intact())),
+                        None => (0, 0),
+                    },
+                )
+            }),
+            run("rtrb push (spins when full) / pop", |n| {
+                let (mut p, c) = rtrb::RingBuffer::new(RING);
+                contended(
+                    n,
+                    move |i| {
+                        let mut s = Sample::new(i);
+                        while let Err(rtrb::PushError::Full(back)) = p.push(s) {
+                            s = back;
+                            std::hint::spin_loop();
+                        }
+                    },
+                    c,
+                    |c| match c.pop() {
+                        Ok(s) => (1, u64::from(!s.intact())),
+                        Err(_) => (0, 0),
+                    },
+                )
+            }),
+        ],
+    );
+}
+
 fn main() {
     println!(
         "hyve-bench: {SAMPLES} interleaved samples per library; median and range of time per operation"
@@ -715,4 +1042,6 @@ fn main() {
         }
     }
     codecs();
+    ids();
+    rings();
 }
