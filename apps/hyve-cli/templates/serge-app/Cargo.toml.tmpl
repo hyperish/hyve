@@ -1,0 +1,20 @@
+[package]
+name = "{{name}}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# The browser build is the library (`cdylib`); the desktop app is `src/main.rs`.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+hyve = "={{hyve}}"
+serge = "={{serge}}"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "={{wasm_bindgen}}"
+
+# `hyve preview --web` bundles this package for the browser.
+[package.metadata.serge]
+web = true

@@ -1,0 +1,28 @@
+//! The backend on an in-memory database: `cargo test --features server`.
+#![cfg(feature = "server")]
+
+use orbic::{Db, TestClient};
+use {{crate}}::*;
+
+#[hyve::test]
+async fn notes_are_created_and_listed() {
+    let client = TestClient::new(backend(Db::in_memory().await));
+
+    let created = client
+        .post("/v1/notes")
+        .json(&NewNote { body: "first".into() })
+        .send()
+        .await;
+    assert!(created.status().is_success(), "{}", created.status());
+
+    let empty = client
+        .post("/v1/notes")
+        .json(&NewNote { body: String::new() })
+        .send()
+        .await;
+    assert_eq!(empty.status(), 400);
+
+    let notes: Vec<Note> = client.get("/v1/notes").send().await.json();
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].body, "first");
+}

@@ -1,0 +1,101 @@
+//! Notes: the model and `#[server]` functions the UI and the backend share,
+//! and the screen that uses them.
+
+use hyve::prelude::*;
+use orbic::prelude::*;
+use serge::prelude::*;
+
+#[model]
+#[table("notes")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Note {
+    #[pk]
+    pub id: Id<Note>,
+    pub body: String,
+}
+
+#[model]
+pub struct NewNote {
+    #[validate(len = 1..=200)]
+    pub body: String,
+}
+
+#[server(GET "/notes")]
+pub async fn list_notes(#[server_ctx] db: Ctx<Db>) -> HyveResult<Vec<Note>> {
+    db.query::<Note>().fetch_all().await
+}
+
+#[server(POST "/notes")]
+pub async fn create_note(#[server_ctx] db: Ctx<Db>, input: Valid<NewNote>) -> HyveResult<Note> {
+    db.insert(Note {
+        id: Id::new(),
+        body: input.into_inner().body,
+    })
+    .await
+}
+
+/// The backend: the `#[server]` functions under `/v1`. The cache in memory
+/// remembers `Idempotency-Key` replies of `POST` calls.
+#[cfg(feature = "server")]
+pub fn backend(db: Db) -> OrbicApp {
+    OrbicApp::new().provide(db).provide(Cache::in_memory()).mount(
+        "/v1",
+        component().handle(list_notes).handle(create_note),
+    )
+}
+
+#[component]
+pub fn Notes() -> Element {
+    let notes = signal(Vec::<Note>::new());
+    let draft = signal(String::new());
+    let status = signal(String::from("Loading…"));
+
+    spawn(async move {
+        match list_notes().await {
+            Ok(v) => {
+                status.set(String::new());
+                notes.set(v);
+            }
+            Err(e) => status.set(format!("Could not load the notes: {}", e.message())),
+        }
+    });
+    let save = move || {
+        spawn(async move {
+            match create_note(NewNote {
+                body: draft.get_untracked(),
+            })
+            .await
+            {
+                Ok(note) => {
+                    notes.update(|v| v.push(note));
+                    draft.set(String::new());
+                    status.set(String::new());
+                }
+                Err(e) => status.set(format!("The server refused: {}", e.message())),
+            }
+        })
+    };
+
+    ui! {
+        Card { padding: 16px, gap: 10px,
+            Text { font_size: 20px, font_weight: 700, "{{name}}" }
+            Stack { layout: h_stack, gap: 8px,
+                Input {
+                    grow: 1.0,
+                    value: draft(),
+                    placeholder: "Write a note",
+                    changed(t) => { draft.set(t); },
+                    submitted => { save(); }
+                }
+                Button { text: "Add", clicked => { save(); } }
+            }
+            if !status().is_empty() {
+                Text { "{status()}" }
+            }
+            for note in notes() {
+                key: note.id,
+                Text { "{note.body}" }
+            }
+        }
+    }
+}

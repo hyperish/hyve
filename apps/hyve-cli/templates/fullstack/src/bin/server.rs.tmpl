@@ -1,0 +1,23 @@
+//! The backend: `hyve preview` runs it with a local database; `cargo run
+//! --features server --bin {{name}}-server` uses `[orbic] database_url` in
+//! hyve.toml. It listens on `APP_ADDR` (default `127.0.0.1:3000`).
+
+use orbic::{Db, Migrations};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let db = Db::from_config().await?;
+    db.migrate(&Migrations::from_dir("migrations".as_ref())?)
+        .await?;
+    let addr = std::env::var("APP_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into());
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    println!(
+        "{{name}} backend on http://{}/v1 (Ctrl-C stops)",
+        listener.local_addr()?
+    );
+    orbic::serve({{crate}}::backend(db), listener, async {
+        let _ = tokio::signal::ctrl_c().await;
+    })
+    .await?;
+    Ok(())
+}

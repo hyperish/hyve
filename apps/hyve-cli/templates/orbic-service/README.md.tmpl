@@ -1,0 +1,14 @@
+# {{name}}
+
+An orbic service made by `hyve init --template orbic-service`.
+
+```sh
+hyve preview   # runs the server with a local database; saving a file restarts it
+hyve test      # the tests, on an in-memory database
+curl -X POST localhost:3000/v1/notes -H 'content-type: application/json' -d '{"body":"hello"}'
+curl localhost:3000/v1/notes
+```
+
+Tables are created by the `.sql` files in `migrations/`, applied in name
+order. `hyve preview` runs orbic's tool, `hyve-orbic`:
+`cargo install orbic-cli --version ={{orbic}}`.

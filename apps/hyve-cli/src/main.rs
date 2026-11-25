@@ -9,6 +9,7 @@
 //! of the `cargo` command it ran), [`EXIT_USAGE`] unknown command, option or
 //! template, [`EXIT_NOT_IMPLEMENTED`] not in this release.
 
+mod templates;
 mod workspace;
 
 use std::ffi::OsString;
@@ -16,6 +17,7 @@ use std::process::{Command, ExitCode};
 
 use hyve_diagnostics::suggest;
 
+use templates::TEMPLATES;
 use workspace::Workspace;
 
 /// The work failed: no workspace, or a failed `cargo` run without its own code.
@@ -26,7 +28,6 @@ const EXIT_USAGE: u8 = 2;
 const EXIT_NOT_IMPLEMENTED: u8 = 3;
 
 const COMMANDS: [&str; 6] = ["init", "preview", "lint", "test", "build", "codegen"];
-const TEMPLATES: [&str; 3] = ["fullstack", "serge-app", "orbic-service"];
 
 const USAGE: &str = "\
 hyve — the Hyperish workflow on top of Cargo
@@ -239,6 +240,8 @@ fn codegen(args: &[String]) -> Result<(), Fail> {
 fn init(args: &[String]) -> Result<(), Fail> {
     let mut it = args.iter();
     let mut path = None;
+    let mut template = TEMPLATES[0];
+    let mut force = false;
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--template" => {
@@ -248,22 +251,88 @@ fn init(args: &[String]) -> Result<(), Fail> {
                         Some(format!("one of {}", TEMPLATES.join(", "))),
                     ));
                 };
-                if !TEMPLATES.contains(&t.as_str()) {
+                let Some(known) = TEMPLATES.iter().find(|k| **k == t.as_str()) else {
                     let help = suggest(t, TEMPLATES)
                         .map(|s| format!("did you mean `{s}`?"))
                         .or_else(|| Some(format!("templates: {}", TEMPLATES.join(", "))));
                     return Err(Fail::Usage(format!("unknown template `{t}`"), help));
-                }
+                };
+                template = known;
             }
-            "--force" => {}
+            "--force" => force = true,
             a if !a.starts_with('-') && path.is_none() => path = Some(a.to_owned()),
             other => return Err(unknown_option("init", other, &["--template", "--force"])),
         }
     }
-    Err(Fail::NotImplemented(
-        "`hyve init` (its templates pin orbic and serge versions, which have no prerelease yet)"
-            .into(),
-    ))
+    let cwd = std::env::current_dir()
+        .map_err(|e| Fail::Failed(format!("no working directory: {e}"), None))?;
+    let dir = match &path {
+        Some(p) => cwd.join(p),
+        None => cwd.clone(),
+    };
+    // The package is named after the directory.
+    let name = std::path::Path::new(&dir)
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(n) => Some(n.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .next_back()
+        .unwrap_or_default();
+    if !templates::valid_name(&name) {
+        return Err(Fail::Usage(
+            format!("`{name}` cannot be a package name (the directory names the package)"),
+            Some(
+                "use letters, digits, `-` and `_`, starting with a letter: `hyve init my-app`"
+                    .into(),
+            ),
+        ));
+    }
+    let files = templates::render(template, &name);
+    let taken: Vec<&str> = files
+        .iter()
+        .filter(|(p, _)| dir.join(p).exists())
+        .map(|(p, _)| p.as_str())
+        .collect();
+    if !taken.is_empty() && !force {
+        return Err(Fail::Failed(
+            format!(
+                "{} already exist{} in {}: {}",
+                if taken.len() == 1 { "a file" } else { "files" },
+                if taken.len() == 1 { "s" } else { "" },
+                dir.display(),
+                taken.join(", ")
+            ),
+            Some("nothing was written; `--force` overwrites them".into()),
+        ));
+    }
+    for (p, text) in &files {
+        let target = dir.join(p);
+        let written = target
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::write(&target, text));
+        if let Err(e) = written {
+            return Err(Fail::Failed(format!("{}: {e}", target.display()), None));
+        }
+    }
+    println!(
+        "created `{name}` from the `{template}` template in {}",
+        dir.display()
+    );
+    let into = path.map(|p| format!("cd {p} && ")).unwrap_or_default();
+    match template {
+        "orbic-service" => {
+            println!("next: {into}hyve preview   (the server, with a local database)")
+        }
+        "serge-app" => {
+            println!("next: {into}hyve preview --web   (or --native for the desktop window)")
+        }
+        _ => println!(
+            "next: {into}hyve preview --web   (the page and its backend; without --web, the desktop window too)"
+        ),
+    }
+    Ok(())
 }
 
 fn preview(args: &[String]) -> Result<(), Fail> {

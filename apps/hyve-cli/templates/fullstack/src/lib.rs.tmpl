@@ -1,0 +1,27 @@
+//! {{name}}: a serge UI for the browser and the desktop, and the orbic
+//! backend it calls.
+
+mod notes;
+
+use std::sync::Arc;
+
+use hyve::api::Transport;
+use serge::prelude::*;
+
+pub use notes::*;
+
+/// The app, calling the backend through `transport`.
+pub fn app(transport: Arc<dyn Transport>) -> SergeApp {
+    SergeApp::new()
+        .title("{{name}}")
+        .transport(transport)
+        .feature(feature().route("/", Notes))
+}
+
+/// The browser entry: the page's own origin, which forwards `/v1` to the
+/// backend.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn start() {
+    app(RemoteTransport::new("/v1").into_arc()).run();
+}

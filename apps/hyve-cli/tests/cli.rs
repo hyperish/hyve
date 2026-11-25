@@ -120,21 +120,80 @@ fn unknown_templates_are_usage_errors() {
 #[test]
 fn unimplemented_commands_never_succeed() {
     let d = temp(&[]);
-    for args in [
-        &["init", "--template", "fullstack"][..],
-        &["init"],
-        &["lint"],
+    let o = hyve(&d, &["lint"]);
+    assert_eq!(o.status.code(), Some(3));
+    assert!(
+        stderr(&o).contains("is not implemented in this release"),
+        "{}",
+        stderr(&o)
+    );
+}
+
+#[test]
+fn init_writes_a_template_and_never_overwrites() {
+    let d = temp(&[]);
+    // The default template is `fullstack`; the directory names the package.
+    let o = hyve(&d, &["init", "notes-app"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let app = d.join("notes-app");
+    let manifest = std::fs::read_to_string(app.join("Cargo.toml")).unwrap();
+    assert!(manifest.contains("name = \"notes-app\""), "{manifest}");
+    assert!(
+        manifest.contains("[package.metadata.orbic.server]"),
+        "{manifest}"
+    );
+    assert!(manifest.contains("[package.metadata.serge]"), "{manifest}");
+    for f in [
+        "hyve.toml",
+        ".gitignore",
+        "migrations/0001_notes.sql",
+        "src/notes.rs",
+        "src/bin/server.rs",
     ] {
-        let o = hyve(&d, args);
-        assert_eq!(o.status.code(), Some(3), "{args:?}");
-        assert!(
-            stderr(&o).contains("is not implemented in this release"),
-            "{args:?}: {}",
-            stderr(&o)
-        );
+        assert!(app.join(f).is_file(), "{f}");
     }
-    // `init` writes nothing.
-    assert_eq!(std::fs::read_dir(&d).unwrap().count(), 0);
+
+    // A second run refuses, names the files, and writes nothing.
+    std::fs::write(app.join("src/lib.rs"), "// mine\n").unwrap();
+    let o = hyve(&d, &["init", "notes-app"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        stderr(&o).contains("already exist")
+            && stderr(&o).contains("src/lib.rs")
+            && stderr(&o).contains("--force"),
+        "{}",
+        stderr(&o)
+    );
+    assert_eq!(
+        std::fs::read_to_string(app.join("src/lib.rs")).unwrap(),
+        "// mine\n"
+    );
+    // `--force` overwrites.
+    let o = hyve(&d, &["init", "--force", "notes-app"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_ne!(
+        std::fs::read_to_string(app.join("src/lib.rs")).unwrap(),
+        "// mine\n"
+    );
+
+    // The other templates, in the working directory.
+    let svc = d.join("svc");
+    std::fs::create_dir(&svc).unwrap();
+    let o = hyve(&svc, &["init", "--template", "orbic-service"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert!(svc.join("migrations/0001_notes.sql").is_file());
+    assert!(!svc.join("src/notes.rs").exists());
+    let o = hyve(&d, &["init", "--template", "serge-app", "ui"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert!(
+        !d.join("ui/hyve.toml").exists(),
+        "a UI-only app needs no hyve.toml"
+    );
+
+    // A directory that cannot name a package.
+    let o = hyve(&d, &["init", "1app"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(!d.join("1app").exists());
 }
 
 #[test]
