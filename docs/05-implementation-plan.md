@@ -148,3 +148,8 @@ Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어�
 - **프리릴리스 기준**: 1~9단계(라이브러리)가 위 기준을 충족하면 `0.1.0-alpha.N`을 배포하고, `orbic`과 `serge`는 그 버전에 의존해 시작합니다(`hyperish/docs` `05-development-rules.md` §5). 10단계 중 프레임워크가 필요 없는 부분(`test`, `build` 기본, CLI 공통 계약)도 여기에 포함합니다.
 - **Phase 완료 기준**: 10단계 중 프레임워크에 걸린 부분(`init` 템플릿이 적는 버전, `preview`, `hyve-orbic`·`hyve-serge` 단계 호출)은 `orbic`과 `serge`의 프리릴리스가 나온 뒤에 마칩니다. 이것까지 끝나야 `hyve`의 Phase 1이 끝납니다.
 - **CI**: 포맷, 린트, 테스트, 최소 Rust 버전 빌드가 통과합니다.
+
+### 프리릴리스 기록
+
+- **`0.1.0-alpha.0` (2026-11-25)**: 태그 `v0.1.0-alpha.0`은 `3174659`입니다. 공개 크레이트 11개를 `cargo publish --workspace --dry-run`으로 리허설한 뒤 의존 순서대로 하나씩 crates.io에 배포했습니다. **확정의 실행 방식을 바꿈**: 사용자 결정으로 위 기준을 모두 채우기 전에 배포했고, **포크 검증**이 일부인 채입니다. `rkyv`·`winnow`·`ariadne`·`bytemuck`은 소스를 편입하지 않은 고정 의존이라 `hyperish/docs` `05-development-rules.md` §7의 8번에 따라 충족으로 보지 않습니다. PR을 거치지 않았기 때문에 `main`이 아닌 `feat/phase1`의 커밋에 태그했습니다. 레지스트리에서 받아 확인한 것은 둘입니다. `cargo install hyve-cli --version =0.1.0-alpha.0`이 설치·실행되고, 경로 없이 `hyve = "=0.1.0-alpha.0"`에만 의존하는 새 크레이트가 빌드되어 `#[model]`·JSON 왕복·검증 거부·시그널과 메모를 실행합니다. `alpha.0`의 `hyve init`은 미구현(`3`)입니다.
+- 이후 변경은 `0.1.0-alpha.1`로 올렸습니다(`22bd6ed`). `orbic`·`serge`는 그 버전이 배포되기 전까지 형제 경로와 정확한 버전 요구를 함께 씁니다(`hyperish/docs` `05-development-rules.md` §5).
