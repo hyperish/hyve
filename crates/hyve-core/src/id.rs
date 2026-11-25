@@ -163,9 +163,26 @@ impl FromStr for Ulid {
     }
 }
 
+const INVALID: u8 = 0xFF;
+
+/// The digit each byte stands for, upper or lower case; `INVALID` for the
+/// rest.
+const DECODE: [u8; 256] = {
+    let mut table = [INVALID; 256];
+    let mut i = 0;
+    while i < ALPHABET.len() {
+        table[ALPHABET[i] as usize] = i as u8;
+        table[ALPHABET[i].to_ascii_lowercase() as usize] = i as u8;
+        i += 1;
+    }
+    table
+};
+
 fn decode_char(b: u8) -> Option<u8> {
-    let upper = b.to_ascii_uppercase();
-    ALPHABET.iter().position(|&a| a == upper).map(|p| p as u8)
+    match DECODE[b as usize] {
+        INVALID => None,
+        d => Some(d),
+    }
 }
 
 /// A [`Ulid`] tagged with the type it identifies, so `Id<User>` and
@@ -299,6 +316,17 @@ mod tests {
         assert!("01ARZ3NDEKTSV4RRFFQ69G5FAI".parse::<Ulid>().is_err()); // I excluded
         let u = Ulid::from_parts(1_469_918_176_385, 0);
         assert!(u.to_string().starts_with("01ARYZ6S41"));
+    }
+
+    #[test]
+    fn every_byte_decodes_as_the_alphabet_says() {
+        for b in 0..=u8::MAX {
+            let by_search = ALPHABET
+                .iter()
+                .position(|&a| a == b.to_ascii_uppercase())
+                .map(|p| p as u8);
+            assert_eq!(decode_char(b), by_search, "byte {b:#04x}");
+        }
     }
 
     #[test]
