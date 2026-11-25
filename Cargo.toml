@@ -17,7 +17,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
@@ -26,16 +26,16 @@ authors = ["Hyperish Contributors"]
 
 [workspace.dependencies]
 # Internal crates: path + exact version (hyperish/docs 05-development-rules.md §5).
-hyve = { path = "crates/hyve", version = "=0.1.0-alpha.0" }
-hyve-api = { path = "crates/hyve-api", version = "=0.1.0-alpha.0" }
-hyve-config = { path = "crates/hyve-config", version = "=0.1.0-alpha.0" }
-hyve-core = { path = "crates/hyve-core", version = "=0.1.0-alpha.0" }
-hyve-diagnostics = { path = "crates/hyve-diagnostics", version = "=0.1.0-alpha.0" }
-hyve-macros = { path = "crates/hyve-macros", version = "=0.1.0-alpha.0" }
-hyve-parser = { path = "crates/hyve-parser", version = "=0.1.0-alpha.0" }
-hyve-serde = { path = "crates/hyve-serde", version = "=0.1.0-alpha.0" }
-hyve-state = { path = "crates/hyve-state", version = "=0.1.0-alpha.0" }
-hyve-validate = { path = "crates/hyve-validate", version = "=0.1.0-alpha.0" }
+hyve = { path = "crates/hyve", version = "=0.1.0-alpha.1" }
+hyve-api = { path = "crates/hyve-api", version = "=0.1.0-alpha.1" }
+hyve-config = { path = "crates/hyve-config", version = "=0.1.0-alpha.1" }
+hyve-core = { path = "crates/hyve-core", version = "=0.1.0-alpha.1" }
+hyve-diagnostics = { path = "crates/hyve-diagnostics", version = "=0.1.0-alpha.1" }
+hyve-macros = { path = "crates/hyve-macros", version = "=0.1.0-alpha.1" }
+hyve-parser = { path = "crates/hyve-parser", version = "=0.1.0-alpha.1" }
+hyve-serde = { path = "crates/hyve-serde", version = "=0.1.0-alpha.1" }
+hyve-state = { path = "crates/hyve-state", version = "=0.1.0-alpha.1" }
+hyve-validate = { path = "crates/hyve-validate", version = "=0.1.0-alpha.1" }
 
 # Pinned third-party crates (docs/02-architecture.md §3).
 ariadne = "=0.6.0"

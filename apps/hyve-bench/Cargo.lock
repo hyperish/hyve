@@ -271,7 +271,7 @@ checksum = "735eaa21a6a5ffb2e84362faaeb90c05ba8e19797ca30428478cb6ea3a4921bc"
 
 [[package]]
 name = "hyve"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-api",
  "hyve-config",
@@ -286,7 +286,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-api"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
  "hyve-serde",
@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-config"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
  "hyve-diagnostics",
@@ -324,7 +324,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-core"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bytemuck",
  "getrandom",
@@ -334,14 +334,14 @@ dependencies = [
 
 [[package]]
 name = "hyve-diagnostics"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "ariadne",
 ]
 
 [[package]]
 name = "hyve-macros"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-diagnostics",
  "proc-macro2",
@@ -351,7 +351,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-parser"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-diagnostics",
  "winnow",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-serde"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
  "rkyv",
@@ -367,11 +367,11 @@ dependencies = [
 
 [[package]]
 name = "hyve-state"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 
 [[package]]
 name = "hyve-validate"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
 ]
