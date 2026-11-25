@@ -34,6 +34,10 @@ jobs:
         run: |
           cargo clippy -p hyve-tests -p hyve-tests-indirect --all-targets --features hyve-tests/server,hyve-tests-indirect/server --locked -- -D warnings
           cargo test -p hyve-tests -p hyve-tests-indirect --features hyve-tests/server,hyve-tests-indirect/server --locked
+      # Every public crate packages and builds from its package alone
+      # (docs/05-implementation-plan.md §3, 배포 가능성).
+      - name: Package the public crates
+        run: cargo package --workspace --exclude hyve-tests --exclude hyve-tests-indirect --locked
 
   msrv:
     name: Build on the declared minimum Rust version
