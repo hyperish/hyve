@@ -9,7 +9,7 @@
 JS 생태계에서 Node.js + npm + webpack + jest + 수많은 서드파티 패키지의 파편화를 **Bun**이 단일 고속 런타임·툴체인·내장 표준 API로 통합했듯, **`hyve`는 기존 Rust/Cargo 생태계의 파편화를 수직 통합으로 해결**합니다.
 
 1. **올인원 개발 툴체인 (Toolchain & CLI — `bun` CLI 포지션)**
-   - 프로젝트 스캐폴딩(`hyve init`), 실시간 핫리로드·미리보기(`hyve preview`), 정적 분석·포맷·진단(`hyve lint`), 고속 단위·통합·매크로 진단 테스트(`hyve test`), 타깃별 프로덕션 빌드·패키징(`hyve build`, 내부에 `codegen` 단계 포함)까지 개발 전 주기를 외부 플러그인 조합 없이 단일 바이너리로 관리합니다(대표 명령 목록과 `build`/`codegen` 관계는 [`01-dx-and-dsl.md`](01-dx-and-dsl.md) §2 참조).
+   - 프로젝트 스캐폴딩(`hyve init`), 로컬 개발 환경 실행과 소스 변경 반영(`hyve dev`), 정적 분석·포맷·진단(`hyve lint`), 고속 단위·통합·매크로 진단 테스트(`hyve test`), 타깃별 프로덕션 빌드·패키징(`hyve build`, 내부에 `codegen` 단계 포함)까지 개발 전 주기를 외부 플러그인 조합 없이 단일 바이너리로 관리합니다(대표 명령 목록과 `build`/`codegen` 관계는 [`01-dx-and-dsl.md`](01-dx-and-dsl.md) §2 참조).
 2. **기본 내장 범용 코어 모듈 (`core` ref — `Bun.*` 내장 API 포지션)**
    - 웹·서버 개발에만 쓰이는 도구가 아니라, 그래픽 엔진·네이티브 앱·CLI·시스템 연산 등 **모든 Rust 범용 개발**에서 반복되는 기반 모듈을 내장합니다.
    - **상태성(State & Reactivity — `signal(init)`)**: UI(`serge`), 백엔드(`orbic`), 엔진·도메인 로직이 공통으로 참조하는 직관적인 신호(`signal(0)`)·상태 그래프·수명 모델.
