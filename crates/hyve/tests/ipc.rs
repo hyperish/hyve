@@ -42,7 +42,20 @@ fn same_user_streams_exchange_bytes_and_release_the_endpoint() {
         .await
         .unwrap();
         drop(listener);
-        let _rebound = ipc::Listener::bind(&endpoint).unwrap();
+        // Windows closes the final pipe handle after the runtime processes its
+        // cancelled overlapped I/O. Let the runtime drive it on this thread.
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match ipc::Listener::bind(&endpoint) {
+                    Err(e) if cfg!(windows) && e.kind() == std::io::ErrorKind::PermissionDenied => {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    result => break result.unwrap(),
+                }
+            }
+        })
+        .await
+        .expect("the endpoint should become available after the last connection closes");
     });
     #[cfg(unix)]
     {
