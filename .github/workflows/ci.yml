@@ -143,6 +143,74 @@ jobs:
             grep -Fx "test $test ... ok" "$RUNNER_TEMP/notes-test.log"
           done
 
+  android-packages:
+    name: Sign a release APK and App Bundle with widgets
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/hyve/target
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/serge
+          ref: ${{ env.SERGE_REF }}
+          path: serge
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: hyve
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build the packaging tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018' 'platforms;android-35' 'build-tools;35.0.0'
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          cargo install cargo-apk --version 0.10.0 --locked
+          cargo build --locked --manifest-path hyve/Cargo.toml -p hyve-cli
+          cargo build --locked --manifest-path orbic/Cargo.toml -p orbic-cli
+          cargo build --locked --manifest-path serge/Cargo.toml -p serge-cli
+      - name: Package the playground and verify the release manifest and signatures
+        working-directory: serge
+        env:
+          HYVE_ANDROID_SIGNING_ALIAS: package-test
+        run: |
+          export PATH="$CARGO_TARGET_DIR/debug:$PATH"
+          export CARGO_APK_RELEASE_KEYSTORE="$RUNNER_TEMP/hyve-release.p12"
+          export CARGO_APK_RELEASE_KEYSTORE_PASSWORD="$(openssl rand -hex 16)"
+          keytool -genkeypair -noprompt -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Hyve packaging test' \
+            -keystore "$CARGO_APK_RELEASE_KEYSTORE" -alias "$HYVE_ANDROID_SIGNING_ALIAS" \
+            -storepass:env CARGO_APK_RELEASE_KEYSTORE_PASSWORD -keypass:env CARGO_APK_RELEASE_KEYSTORE_PASSWORD
+          hyve build -p serge-playground --format apk,aab
+          apk="$CARGO_TARGET_DIR/release/apk/serge-playground.apk"
+          bundle="$CARGO_TARGET_DIR/release/apk/serge-playground.aab"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify "$apk"
+          jarsigner -verify -strict -keystore "$CARGO_APK_RELEASE_KEYSTORE" \
+            -storepass:env CARGO_APK_RELEASE_KEYSTORE_PASSWORD "$bundle" "$HYVE_ANDROID_SIGNING_ALIAS"
+          "$tools/aapt2" dump badging "$apk" > "$RUNNER_TEMP/apk-badging"
+          if grep -q '^application-debuggable' "$RUNNER_TEMP/apk-badging"; then
+            echo "The playground release APK has debugging enabled" >&2
+            exit 1
+          fi
+          "$tools/aapt2" dump xmltree --file AndroidManifest.xml "$apk" > "$RUNNER_TEMP/apk-manifest"
+          grep -F 'android.appwidget.provider' "$RUNNER_TEMP/apk-manifest"
+          unzip -Z1 "$bundle" > "$RUNNER_TEMP/bundle-entries"
+          grep -Fx 'base/lib/arm64-v8a/libserge_playground.so' "$RUNNER_TEMP/bundle-entries"
+
   ios:
     name: Package and launch a generated iOS app
     runs-on: macos-latest
