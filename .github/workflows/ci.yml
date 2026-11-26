@@ -194,7 +194,7 @@ jobs:
           hyve build --debug --format ios-sim
           bundle=target/debug/ios/ios-counter/simulator/ios-counter.app
           test -x "$bundle/PlugIns/SergeWidgets.appex/SergeWidgets"
-          nm -gU "$bundle/ios-counter" | rg '_serge_widget_publish_v1$'
+          nm -gU "$bundle/ios-counter" | grep -E '_serge_widget_publish_v1$'
           python3 ../hyve/apps/hyve-cli/tests/ios_simulator.py "$bundle"
 
   msrv:
