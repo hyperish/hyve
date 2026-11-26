@@ -28,11 +28,15 @@ Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어�
 | 7 | `hyve-api` | 계약 디스크립터, 호출 스텁의 전송 트레이트, 전송 계약 상수(`03-adapters-and-pipeline.md` §3), `Path<T>`·`Query<T>`·`Page<T>`·`CursorParams`, 추상 테스트 클라이언트 트레이트 | 1, 3, 4 |
 | 8 | `hyve-config` | 우선순위 로더와 시작 시점 검증 | 4, 6 |
 | 9 | `hyve` | 재수출과 prelude | 1~8 |
-| 10 | `hyve-cli` | `init`, `preview` 기본 실행, `test`, `build` 기본, `codegen`과 `codegen --check`, 프레임워크 단계 호출 | 9 |
+| 10 | `hyve-cli` | `init`, `dev` 기본 실행, `test`, `build` 기본, `codegen`과 `codegen --check`, 프레임워크 단계 호출 | 9 |
 
 - **진행 순서 메모 (2026-11-24)**: 7단계(`hyve-api`)를 6단계보다 먼저 했습니다. 7단계는 1·3·4단계에만 기대고, 6단계 매크로가 만드는 코드가 7단계 항목을 가리키기 때문입니다. 생성 코드가 `::hyve` 경로를 쓰므로 진입 크레이트의 골격(재수출과 생성 코드용 경로)을 6단계에서 만들고 9단계에서 마무리합니다. 매크로 테스트는 자기 `server` 피처를 가진 미배포 픽스처 크레이트 `hyve-tests`에 두고, CI가 피처를 끈 빌드와 켠 빌드를 모두 검사합니다. 문서 예시 테스트(§1의 `mvp.rs`)도 `crates/hyve` 대신 `crates/hyve-tests/tests/mvp.rs`에 둡니다. `config::load`가 읽을 `hyve.toml` 픽스처를 배포 크레이트에 넣지 않기 위해서입니다. 코어 경계 기준은 `crates/hyve-tests/tests/boundary.rs`가 `Cargo.lock`과 멤버 매니페스트로 확인합니다.
 
 `SharedRingBuf`의 OS 공유 메모리 모드, `asset!`, `hyve-trace`, `hyve lint`, 상태 보존 HMR은 Phase 2입니다.
+
+Phase 2 검증 문법과 상태 복원, Phase 3 바이너리 핫패치의 구현 인수 사례는 [모델 검증 규칙](02-architecture.md#validation-rules)과 [개발 리로드](01-dx-and-dsl.md#dev-reload)에 있습니다. 현재 CLI의 재시작·페이지 리로드 검증은 Phase 1에 해당합니다.
+
+**핫패치 기반 기술 검증 (2026-11-26).** macOS arm64, Rust 1.94.1에서 임시 Rust 앱을 `dx`·`dioxus-devtools`·`subsecond` 0.7.10으로 실행했습니다. `dx serve --platform macos --renderer native --hot-patch`로 로컬 개발 세션을 열고 `subsecond::call(|| 17u32)`의 리터럴을 29로 바꿨습니다. 관찰 파일에서 반환값이 17→29로 바뀔 때 PID가 같았고, 함수 밖 카운터가 6→12로 이어졌습니다. 이 실험이 확인한 범위는 같은 프로세스의 함수 교체입니다. Hyve의 편집 분류기, 스냅샷 복원과 실패 시 재시작은 후속 구현 인수 항목입니다. [Subsecond 0.7.10](https://docs.rs/subsecond/0.7.10/subsecond/)
 
 ## 3. 완료 기준
 
@@ -45,7 +49,9 @@ Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어�
 - **포크 검증**: 포크본이 원본과 달라진 점과 측정 결과를 남깁니다.
 - **배포 가능성**: 공개 크레이트 전부가 패키징됩니다.
 
-### 진행 상황 (2026-11-24)
+### 진행 상황 (2026-11-26 갱신)
+
+아래 표의 로컬 개발 명령은 2026-11-26에 채택한 이름 `hyve dev`로 표기합니다. 같은 날 로컬 빌드로 새 풀스택 앱의 웹·데스크톱·서버 동시 실행을 확인했습니다. `--web`에서는 소스 수정 후 새로고침 이벤트, 서버 재시작, 저장한 노트 재조회, Ctrl-C 뒤 두 포트 해제까지 확인했습니다.
 
 | 기준 | 상태 | 근거 |
 |---|---|---|
@@ -54,8 +60,8 @@ Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어�
 | 직렬화 | 충족 | `hyve-serde` 테스트: 두 코덱 왕복(`u64::MAX`·`i64::MIN`·무한대·NaN·`-0.0` 비트 단위 포함), 잘린 입력·바이트 변조·깊은 중첩(128 한도)·버퍼를 넘는 길이. 기준 아카이브(`tests/reference.bin`)를 네이티브와 `wasm32`가 모두 읽고 바이트까지 같게 씀(CI `wasm` 작업) |
 | 상태 | 충족 | `hyve-state` 테스트: 슬롯 반환, 갈래 의존의 이펙트 1회, `update` 안 읽기 |
 | 코어 경계 | 충족 | `crates/hyve-tests/tests/boundary.rs` |
-| CLI | **일부** | 공통 계약(미구현은 실패, 알 수 없는 명령·옵션·템플릿은 오류, 워크스페이스 없음은 오류, `test`·`build` 종료 코드는 실제 결과)과 `test`·`build` 기본은 `apps/hyve-cli/tests/cli.rs`가 확인. 프레임워크 단계 호출(`codegen`, `build`)은 구현했고, 가짜 실행 파일로 순서·옵션 전달·종료 코드·버전 불일치·실행 파일 없음을, 로컬의 실제 `hyve-orbic`으로 `hyve codegen --check`를 확인했습니다(2026-11-24). `preview`는 `serge` 단계 호출로 구현했고(옵션 전달·제공 도구 없음 오류를 가짜 실행 파일로 확인, 2026-11-25), 실제 `hyve-serge`는 `serge`의 `apps/serge-cli`가 제공합니다. 실제 `hyve-serge`를 `hyve`로 거친 호출은 `serge` 워크스페이스에서 `hyve build --debug`(웹 번들 생성)와 `hyve preview --web`(데브 서버가 페이지를 서빙)으로 확인했습니다(2026-11-25, `PATH`에 로컬 빌드를 둠). 설치한 도구로도 확인했습니다: 세 도구를 임시 위치에 `cargo install --locked --path`로 설치하고 그것만 `PATH`에 두어 `hyve preview --web`이 페이지와 `orbic` 백엔드를 함께 띄움(2026-11-25). 레지스트리에서 받은 설치본은 배포 전이라 **미검증**. `preview`는 모든 프레임워크의 `preview` 단계를 동시에 띄우고 표준 입력 파이프로 함께 멈춥니다(어느 단계든 끝나면 나머지를 멈추고 그 종료 코드로 끝남, 응답 없는 단계는 강제 종료를 가짜 실행 파일로 확인, 2026-11-25). `orbic` 로컬 서버를 함께 띄우고 소스 변경 시 재기동하는 것은 `hyve-orbic preview`가 맡습니다. `preview` 중의 `codegen`도 `hyve-orbic preview`가 빌드마다 돌리고(바뀐 쿼리 파일만 씀, orbic `docs/01-dx-and-dsl.md` §3, 2026-11-25), 서버에 로컬 DB를 줍니다. 상태 보존(HMR)은 Phase 2이고, Windows에서의 함께 멈춤은 **미검증**입니다. `init`(2026-11-25, `0.1.0-alpha.1`): 세 템플릿을 쓰고, 기존 파일이 있으면 목록을 알리고 아무것도 쓰지 않으며 `--force`로만 덮어쓰고, 패키지가 될 수 없는 디렉터리 이름은 `2`임을 `apps/hyve-cli/tests/cli.rs`가 확인합니다. 생성한 세 프로젝트를 로컬 `hyve`·`orbic`·`serge`(`alpha.1`, `[patch.crates-io]`)로 빌드·테스트하고 `wasm32` 라이브러리를 빌드했으며, `fullstack`은 `hyve preview --web`으로 페이지·프록시를 거친 노트 생성과 목록·검증 오류 `400`·로컬 DB·헤드리스 Chrome에서 입력과 추가와 새로 고침 뒤 유지·Ctrl-C 뒤 남는 것 없음을 확인했습니다. 레지스트리에 배포된 `alpha.1`로 받는 검증은 배포 뒤에 하며 그전까지 **미검증**입니다 |
-| 포크 검증 | **일부** | 달라진 점과 측정은 아래 기록. `hyve-state`·바이너리 코덱·JSON 코덱·`Ulid`·`SharedRingBuf`는 원본과 측정함(2026-11-25). 고정 의존으로 그대로 쓰는 `rkyv`·`winnow`·`ariadne`·`bytemuck`은 소스를 편입하지 않았으므로 `hyperish/docs` `05-development-rules.md` §7의 8번에 따라 검증을 충족한 것으로 보지 않음 |
+| CLI | **일부** | 공통 계약(미구현은 실패, 알 수 없는 명령·옵션·템플릿은 오류, 워크스페이스 없음은 오류, `test`·`build` 종료 코드는 실제 결과)과 `test`·`build` 기본은 `apps/hyve-cli/tests/cli.rs`가 확인. 프레임워크 단계 호출(`codegen`, `build`)은 구현했고, 가짜 실행 파일로 순서·옵션 전달·종료 코드·버전 불일치·실행 파일 없음을, 로컬의 실제 `hyve-orbic`으로 `hyve codegen --check`를 확인했습니다(2026-11-24). `dev`는 `serge` 단계 호출로 구현했고(옵션 전달·제공 도구 없음 오류를 가짜 실행 파일로 확인, 2026-11-25), 실제 `hyve-serge`는 `serge`의 `apps/serge-cli`가 제공합니다. 실제 `hyve-serge`를 `hyve`로 거친 호출은 `serge` 워크스페이스에서 `hyve build --debug`(웹 번들 생성)와 `hyve dev --web`(데브 서버가 페이지를 서빙)으로 확인했습니다(2026-11-25, `PATH`에 로컬 빌드를 둠). 설치한 도구로도 확인했습니다: 세 도구를 임시 위치에 `cargo install --locked --path`로 설치하고 그것만 `PATH`에 두어 `hyve dev --web`이 페이지와 `orbic` 백엔드를 함께 띄움(2026-11-25). 레지스트리에서 받은 설치본은 배포 전이라 **미검증**. `dev`는 모든 프레임워크의 `dev` 단계를 동시에 띄우고 표준 입력 파이프로 함께 멈춥니다(어느 단계든 끝나면 나머지를 멈추고 그 종료 코드로 끝남, 응답 없는 단계는 강제 종료를 가짜 실행 파일로 확인, 2026-11-25). `orbic` 로컬 서버를 함께 띄우고 소스 변경 시 재기동하는 것은 `hyve-orbic dev`가 맡습니다. `dev` 중의 `codegen`도 `hyve-orbic dev`가 빌드마다 돌리고(바뀐 쿼리 파일만 씀, orbic `docs/01-dx-and-dsl.md` §3, 2026-11-25), 서버에 로컬 DB를 줍니다. 상태 보존(HMR)은 Phase 2이고, Windows에서의 함께 멈춤은 **미검증**입니다. `init`(2026-11-25, `0.1.0-alpha.1`): 세 템플릿을 쓰고, 기존 파일이 있으면 목록을 알리고 아무것도 쓰지 않으며 `--force`로만 덮어쓰고, 패키지가 될 수 없는 디렉터리 이름은 `2`임을 `apps/hyve-cli/tests/cli.rs`가 확인합니다. 생성한 세 프로젝트를 로컬 `hyve`·`orbic`·`serge`(`alpha.1`, `[patch.crates-io]`)로 빌드·테스트하고 `wasm32` 라이브러리를 빌드했으며, `fullstack`은 `hyve dev --web`으로 페이지·프록시를 거친 노트 생성과 목록·검증 오류 `400`·로컬 DB·헤드리스 Chrome에서 입력과 추가와 새로 고침 뒤 유지·Ctrl-C 뒤 남는 것 없음을 확인했습니다. 2026-11-26 공개 레지스트리의 alpha.1 의존성만 사용하는 새 풀스택 앱에서 로컬 CLI의 `hyve test`가 SQLite 노트 생성·검증 거부·조회 세 시나리오를 실행했습니다 |
+| 포크 검증 | 코어 편입 경로 측정 | winnow, ariadne, bytemuck, rkyv의 편입 함수는 각각의 기준 리비전과 라이선스를 보관합니다. 자체 상태 그래프·식별자·코덱의 측정과 함께 아래에 기록했습니다. |
 | 배포 가능성 | 충족 | 공개 크레이트 11개(`hyve-cli` 포함)를 CI가 `cargo package --workspace`로 패키징하고 각 패키지만으로 빌드합니다(2026-11-25 추가). `0.1.0-alpha.0`은 `cargo publish --workspace --dry-run`을 거쳐 배포합니다 |
 | CI | 통과 | 같은 명령(포맷, 린트, 테스트 두 빌드, `1.85` 네이티브·`wasm32` 검사, `wasm32` 테스트)이 GitHub Actions에서 `main`과 `feat/**` 브랜치 push마다 돌고 통과합니다(2026-11-25, `feat/phase1`의 최근 실행 모두 성공). 공개 크레이트 패키징도 같은 작업에서 돕니다 |
 
@@ -63,12 +69,32 @@ Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어�
 
 | 대상 | 원본 | 달라진 점 |
 |---|---|---|
-| `rkyv` | `0.8.18` 고정 의존 | 원본 그대로. 피처는 `std`·`bytecheck`·`little_endian`·`aligned`·`pointer_width_32`. 신뢰할 수 없는 바이트는 원본의 고수준 검증 대신 `hyve-serde`의 깊이 한도(128) 검증기를 거침 |
-| `winnow`, `ariadne`, `bytemuck` | `1.0.5`, `0.6.0`, `1.25.2` 고정 의존 | 원본 그대로 |
+| `rkyv` | `0.8.18` | 아카이브 검증 깊이 128, 비정렬 입력의 스레드별 임시 버퍼. 바이너리 포맷과 `bytecheck`를 유지합니다. |
+| `winnow`, `ariadne`, `bytemuck` | `1.0.5`, `0.6.0`, `1.25.2` | 완전 입력 ASCII 토큰, 이름 붙은 단일 소스 캐시, POD 바이트 뷰를 각 소유 크레이트에 편입했습니다. |
 | `hyve-state` | `reactive_graph` `0.3.0-rc1` 레퍼런스 | 자체 구현. 같은 점: 푸시-풀 세 상태(Clean/Check/Dirty), 소유자 트리 정리. 다른 점: 스레드 로컬 단일 스레드 아레나와 세대 번호·런타임 번호가 붙은 핸들, 비동기 스포너·`AnySubscriber` 동적 디스패치 없음. 노드는 구조체 배열이고 값은 `Rc<dyn Any>`라서, §3 개조 방향의 SoA 분리(값 배열·구독자 비트셋)는 **아직 하지 않음**. 측정 뒤에 정함 |
 | `Ulid` | `ulid` `3.0.0` 레퍼런스 | 자체 구현. 난수는 `getrandom`, 같은 밀리초 안에서 단조 증가 |
 | `SharedRingBuf<T>` | `rtrb`·`crossbeam-queue` 레퍼런스 | 자체 구현. 소비형 큐가 아니라 최신 샘플 덮어쓰기와 찢어짐 없는 스냅샷 |
 | JSON | `serde_json` 대신 | `#[model]`이 생성하는 자체 코덱 (§2.3 규칙) |
+
+### 파서 비교
+
+`hyve-parser`는 winnow 1.0.5의 `take_till`에서 완전한 UTF-8 입력의 ASCII 연속 토큰만 소비하는 루프를 편입했습니다. 숫자와 단위, 환경변수 이름에 같은 함수를 사용합니다. 기준 커밋은 `21b3ab2535a675768a170a851efda83253b9eb21`입니다. 갱신할 때 원본의 빈 입력·오프셋·입력 소비 규칙을 대조한 뒤 벤치에서 공개판과 결과를 비교합니다. [원본](https://github.com/winnow-rs/winnow/blob/21b3ab2535a675768a170a851efda83253b9eb21/src/token/mod.rs) · [편입 소스와 라이선스](../crates/hyve-parser/src/winnow/)
+
+2026-11-26 macOS arm64 release 빌드에서 공개 `hyve-parser 0.1.0-alpha.1`과 같은 입력으로 21번 교차 측정했습니다. 시간 리터럴의 중앙값은 10.8 ns와 23.1 ns였습니다. 환경변수 세 줄의 중앙값은 177.2 ns와 186.5 ns였고 측정 범위가 겹쳤습니다. 빈 값, 한글, 키 중복, 잘못된 단위·따옴표·오버플로의 값과 진단 바이트 범위도 비교합니다. 재현 명령은 `HYVE_BENCH_ONLY=parser cargo run --locked --release --manifest-path apps/hyve-bench/Cargo.toml`입니다. [벤치](../apps/hyve-bench/src/main.rs)
+
+### 코어 소스 편입 측정
+
+Apple arm64에서 릴리스 빌드로 각 구현을 21회 번갈아 실행했습니다. `apps/hyve-bench`에서 `HYVE_BENCH_ONLY='source specialization' cargo run --release --locked`와 `HYVE_BENCH_ONLY='binary decode' cargo run --release --locked`로 재현합니다. 시간은 중앙값입니다.
+
+| 입력과 검사 | 로컬 | 비교 기준 |
+|---|---:|---:|
+| 512줄 Unicode 설정의 오류 8건 렌더링. 공개 alpha.1과 컬러·일반 출력 일치 | 17.85 µs | 47.37 µs |
+| 슬롯 1,024개인 POD 링 생성·해제. 슬롯 헤더와 페이로드가 한 할당을 공유 | 661 ns | 11.54 µs |
+| 11바이트 POD 쓰기와 최근 4개 스냅샷. 결과 체크섬 일치 | 14.6 ns | 27.0 ns |
+| 정렬된 페이지 검증·디코딩 | 6.04 µs | rkyv 6.08 µs |
+| 비정렬 페이지를 복사해 검증·디코딩 | 6.16 µs | 새 정렬 버퍼와 rkyv 6.10 µs |
+
+rkyv 두 비교의 측정 범위가 겹칩니다. 중첩 호출은 독립 버퍼를 쓰며, 길이 64 KiB 이하의 버퍼 한 개만 내용을 지운 뒤 스레드에서 재사용합니다. 각 모듈의 머리말과 동봉 라이선스에 베이스 커밋을 기록했습니다. [ariadne](../crates/hyve-diagnostics/src/ariadne_source/) · [bytemuck](../crates/hyve-core/src/pod_bytes/) · [rkyv](../crates/hyve-serde/src/archive_scratch/)
 
 ### 원본 대비 측정 (2026-11-25)
 
@@ -146,8 +172,22 @@ Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어�
 ### 프리릴리스 기준과 Phase 완료 기준
 
 - **프리릴리스 기준**: 1~9단계(라이브러리)가 위 기준을 충족하면 `0.1.0-alpha.N`을 배포하고, `orbic`과 `serge`는 그 버전에 의존해 시작합니다(`hyperish/docs` `05-development-rules.md` §5). 10단계 중 프레임워크가 필요 없는 부분(`test`, `build` 기본, CLI 공통 계약)도 여기에 포함합니다.
-- **Phase 완료 기준**: 10단계 중 프레임워크에 걸린 부분(`init` 템플릿이 적는 버전, `preview`, `hyve-orbic`·`hyve-serge` 단계 호출)은 `orbic`과 `serge`의 프리릴리스가 나온 뒤에 마칩니다. 이것까지 끝나야 `hyve`의 Phase 1이 끝납니다.
+- **Phase 완료 기준**: 10단계 중 프레임워크에 걸린 부분(`init` 템플릿이 적는 버전, `dev`, `hyve-orbic`·`hyve-serge` 단계 호출)은 `orbic`과 `serge`의 프리릴리스가 나온 뒤에 마칩니다. 이것까지 끝나야 `hyve`의 Phase 1이 끝납니다.
 - **CI**: 포맷, 린트, 테스트, 최소 Rust 버전 빌드가 통과합니다.
+
+### Phase 2 구현 검증 (2026-11-26)
+
+`asset!("/shaders/pbr.wgsl")`를 포함한 문서 예시를 실행합니다. 선언 패키지의 파일을 컴파일할 때 포함하므로 네이티브와 웹에서 같은 바이트를 읽습니다. [문서 예시 테스트](../crates/hyve-tests/tests/mvp.rs)
+
+필드 정규식과 필드·모델 검사 함수는 네이티브와 브라우저 WASM에서 같은 경로에 위반을 기록합니다. 패턴 문법과 검사 함수 시그니처의 컴파일 오류도 검사합니다. [공유 입력 테스트](../crates/hyve-tests/tests/predicates.rs)
+
+`hyve lint`는 포맷, 코어의 전이 의존성, 프레임워크의 `codegen --check`와 제공된 `lint` 단계, 서버 피처를 포함한 Clippy를 순서대로 실행합니다. `hyve lint --expand`는 설치된 `cargo-expand`로 현재 패키지의 전개 결과를 출력합니다. [CLI 구현](../apps/hyve-cli/src/lint.rs)
+
+`hyve::trace`는 요청 스코프에 연결한 수신기로 구조화된 로그·카운터·측정값과 스팬의 시작·종료를 보냅니다. [스팬과 수신기](../crates/hyve-trace/src/lib.rs)
+
+### 데스크톱 패키징 (2026-11-26)
+
+`hyve build --format app,dmg`는 코드 생성과 프레임워크 빌드 후 릴리스 바이너리를 패키징합니다. 패키지별 설정은 `[package.metadata.packager]`에서 읽고, 데스크톱 패키저로 `cargo-packager` 0.11.8을 사용합니다. 생성한 앱의 `org.example.*` 식별자는 배포 전에 앱 식별자로 교체합니다. macOS에서 임시 앱을 ad hoc 서명해 패키징하고 `codesign --verify --strict`, 번들 실행, `hdiutil verify`를 확인했습니다. Linux arm64에서는 `hyve build -p hyve-package-check --format deb,appimage`로 두 산출물을 만들었습니다. 별도 Debian 컨테이너에서 DEB를 풀어 `/usr/bin/hyve-package-check`를 실행하고, AppImage를 추출해 `AppRun`의 출력을 확인했습니다. Windows용 형식은 `wix`·`nsis`입니다. [데스크톱 패키저](https://docs.rs/cargo-packager/0.11.8/cargo_packager/)
 
 ### 프리릴리스 기록
 
