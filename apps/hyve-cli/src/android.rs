@@ -271,7 +271,8 @@ pub(super) fn compose(
         .env("HYVE_ANDROID_PASSWORD", password)
         .env("HYVE_ANDROID_ALIAS", alias)
         .env_remove("HYVE_ANDROID_RESOURCES")
-        .arg("--no-daemon");
+        .arg("--no-daemon")
+        .arg(format!("-PhyveBuildType={profile}"));
     if let Some(library) = library {
         gradle.env("HYVE_ANDROID_WIDGETS", library);
     }

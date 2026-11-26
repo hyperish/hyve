@@ -26,6 +26,10 @@ root.removeAttribute('package')
 def widgets = System.getenv('HYVE_ANDROID_WIDGETS') != null
 def layoutSupport = System.getenv('HYVE_ANDROID_WINDOW_LAYOUT') == '1'
 def application = root.getElementsByTagName('application').item(0)
+// cargo-apk has resolved the Cargo profile and any application.debuggable override.
+// Apply that value through the Android build type so release lint can validate the manifest.
+def nativeDebuggable = application.getAttributeNS(androidUri, 'debuggable')
+application.removeAttributeNS(androidUri, 'debuggable')
 if (widgets || file('src/main/java').isDirectory()) application.setAttributeNS(androidUri, 'android:hasCode', 'true')
 def usesPermission = { permission ->
     if (!root.getElementsByTagName('uses-permission').any { it.getAttributeNS(androidUri, 'name') == permission }) {
@@ -88,8 +92,9 @@ android {
         }
     }
     buildTypes {
-        debug.signingConfig = signingConfigs.selected
-        release.signingConfig = signingConfigs.selected
+        def requested = getByName(project.property('hyveBuildType'))
+        requested.signingConfig = signingConfigs.selected
+        if (nativeDebuggable) requested.debuggable = nativeDebuggable.toBoolean()
     }
     // cargo-apk has already applied the developer's Rust strip policy.
     packaging.jniLibs.keepDebugSymbols += ['**/*.so']
