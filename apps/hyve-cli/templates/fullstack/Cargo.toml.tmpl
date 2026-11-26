@@ -1,0 +1,71 @@
+[package]
+name = "{{name}}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+default-run = "{{name}}"
+
+[features]
+cache-redis = ["server"]
+## Compiles the `#[server]` function bodies and the orbic backend (the
+## server binary). Without it (browser, desktop) only call stubs remain.
+server = ["orbic/server", "dep:tokio"]
+
+# The browser build is the library (`cdylib`); the desktop app is
+# `src/main.rs`; the backend is `src/bin/server.rs`.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "{{name}}-server"
+path = "src/bin/server.rs"
+required-features = ["server"]
+
+[dependencies]
+hyve = "={{hyve}}"
+orbic = { version = "={{orbic}}", default-features = false }
+serge = "={{serge}}"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "={{wasm_bindgen}}"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", optional = true, features = ["macros", "net", "rt-multi-thread", "signal"] }
+
+[dev-dependencies]
+hyve = { version = "={{hyve}}", features = ["test"] }
+
+# `hyve dev --web` bundles this package for the browser.
+[package.metadata.serge]
+web = true
+export = "{{name}}"
+
+[package.metadata.packager]
+identifier = "org.example.{{bundle_name}}"
+binaries = [{ path = "{{name}}", main = true }]
+
+# `hyve dev` builds and runs the backend, gives it a local database, and
+# restarts it when a source changes.
+[package.metadata.orbic.server]
+cache_features = ["cache-redis", "orbic/cache-redis"]
+bin = "{{name}}-server"
+features = ["server"]
+
+[package.metadata.android]
+package = "org.example.{{crate}}"
+build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "{{name}}"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"
+
+[package.metadata.ios]
+project = "ios/App.xcodeproj"
+scheme = "App"
+export_options = "ios/ExportOptions.plist"

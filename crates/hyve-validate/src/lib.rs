@@ -1,98 +1,338 @@
-//! `hyve-validate` — Target-neutral structural validation and schema metadata reflection.
+//! `hyve-validate` — validation and schema metadata shared by every layer
+//! (`docs/02-architecture.md` §2.3).
+//!
+//! - [`Validate`]: `#[model]` implements it from `#[validate(...)]` field rules
+//!   and an optional whole-model predicate. See [`rules`] for length,
+//!   range, regular expression, and predicate checks.
+//!   Every field is also validated recursively, so nested models are checked.
+//! - [`Valid<T>`]: proof that a value passed validation. Handlers that take
+//!   `Valid<T>` never see invalid input; servers always re-validate at the
+//!   trust boundary.
+//! - [`Schema`]: type and constraint metadata used to generate API documents
+//!   (`orbic-openapi`) without either side knowing about the other.
 
-use hyve_core::{HyveError, HyveResult};
-use std::ops::Deref;
+pub mod rules;
+mod schema;
 
-/// Validation constraint attached to a model field.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FieldConstraint {
-    /// Minimum and maximum string/collection length bounds (inclusive).
-    Len {
-        /// Minimum allowed length.
-        min: usize,
-        /// Maximum allowed length.
-        max: usize,
-    },
-    /// Minimum and maximum numeric range bounds (inclusive).
-    Range {
-        /// Minimum allowed numeric value.
-        min: i64,
-        /// Maximum allowed numeric value.
-        max: i64,
-    },
-    /// Value must not be empty.
-    NonEmpty,
-}
+/// Support for generated code; not a public API.
+#[doc(hidden)]
+pub mod __private {
+    use std::marker::PhantomData;
 
-/// Static schema metadata describing one model field.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FieldSchema {
-    /// Rust field identifier (`snake_case`).
-    pub name: &'static str,
-    /// Rust field type string.
-    pub ty: &'static str,
-    /// Declared validation constraints.
-    pub constraints: Vec<FieldConstraint>,
-    /// True if annotated with `#[pk]`.
-    pub is_pk: bool,
-}
+    /// Autoref specialization on `T: Default`: `(&DefaultProbe::<T>::new()).probe_default()`
+    /// resolves to [`ViaDefault`] when `T: Default` and to [`NoDefault`]
+    /// otherwise. Only valid where `T` is a concrete type.
+    pub struct DefaultProbe<T>(PhantomData<fn() -> T>);
 
-/// Static schema metadata describing a `#[model]` type.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModelSchema {
-    /// Struct identifier.
-    pub name: &'static str,
-    /// Optional relational table name from `#[table("...")]`.
-    pub table_name: Option<&'static str>,
-    /// Ordered field schemas.
-    pub fields: Vec<FieldSchema>,
-}
-
-/// Trait implemented automatically by `#[model]` types exposing schema metadata.
-pub trait HasSchema {
-    /// Returns static schema metadata for this model.
-    fn schema() -> ModelSchema;
-}
-
-/// Structured field-level validation failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValidationError {
-    /// Failing field name.
-    pub field: &'static str,
-    /// Machine-readable constraint violation code.
-    pub code: &'static str,
-    /// Human-readable description with fix guidance.
-    pub message: String,
-}
-
-/// Trait implemented by models supporting structural validation.
-pub trait Validate {
-    /// Validates `self`, returning structured field errors if any invariant fails.
-    fn validate(&self) -> Result<(), Vec<ValidationError>>;
-}
-
-/// Newtype wrapper guaranteeing the inner `T` passed all [`Validate`] rules.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Valid<T>(T);
-
-impl<T: Validate> Valid<T> {
-    /// Validates `val`, returning `Err(HyveError::domain("invalid_request", ...))` on failure.
-    pub fn new(val: T) -> HyveResult<Self> {
-        match val.validate() {
-            Ok(()) => Ok(Self(val)),
-            Err(errors) => {
-                let summary = errors
-                    .iter()
-                    .map(|e| format!("{}: {}", e.field, e.message))
-                    .collect::<Vec<_>>()
-                    .join("; ");
-                Err(HyveError::domain("invalid_request", summary))
-            }
+    impl<T> DefaultProbe<T> {
+        /// A probe for `T`.
+        pub fn new() -> Self {
+            DefaultProbe(PhantomData)
         }
     }
 
-    /// Consumes the wrapper and returns the validated inner value.
-    #[must_use]
+    impl<T> Default for DefaultProbe<T> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    /// Picked when `T: Default`.
+    pub trait ViaDefault<T> {
+        /// `Some(T::default())`.
+        fn probe_default(&self) -> Option<T>;
+    }
+
+    impl<T: Default> ViaDefault<T> for DefaultProbe<T> {
+        fn probe_default(&self) -> Option<T> {
+            Some(T::default())
+        }
+    }
+
+    /// Picked otherwise.
+    pub trait NoDefault<T> {
+        /// `None`.
+        fn probe_default(&self) -> Option<T>;
+    }
+
+    impl<T> NoDefault<T> for &DefaultProbe<T> {
+        fn probe_default(&self) -> Option<T> {
+            None
+        }
+    }
+}
+
+pub use schema::{
+    Constraint, Definition, FieldSchema, Schema, SchemaNode, SchemaRegistry, generic_name, label,
+};
+
+use std::collections::{BTreeMap, HashMap};
+use std::fmt;
+use std::ops::Deref;
+
+use hyve_core::{HyveError, Id, Timestamp, Ulid, Value};
+
+/// One failed rule.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Violation {
+    /// Where (`$.items[2].name`, using JSON field names).
+    pub path: String,
+    /// Which rule (`len`, `range`).
+    pub rule: &'static str,
+    /// Human-readable explanation.
+    pub message: String,
+    /// Rule parameters (`min`, `max`), merged into the error details.
+    pub params: Value,
+}
+
+/// All failed rules of one validation run.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Violations(Vec<Violation>);
+
+impl Violations {
+    /// No violations.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Records a violation.
+    pub fn push(&mut self, v: Violation) {
+        self.0.push(v);
+    }
+
+    /// Whether nothing failed.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The violations in the order they were found.
+    pub fn iter(&self) -> impl Iterator<Item = &Violation> {
+        self.0.iter()
+    }
+
+    /// `invalid_request` with `details.fields = [{path, rule, message, ...params}]`.
+    pub fn into_error(self) -> HyveError {
+        let first = self
+            .0
+            .first()
+            .map(|v| format!("{}: {}", v.path, v.message))
+            .unwrap_or_default();
+        let fields: Vec<Value> = self
+            .0
+            .into_iter()
+            .map(|v| {
+                let mut m = Value::map();
+                m.insert("path", v.path);
+                m.insert("rule", v.rule);
+                m.insert("message", v.message);
+                if let Value::Map(params) = v.params {
+                    for (k, val) in params {
+                        m.insert(k, val);
+                    }
+                }
+                m
+            })
+            .collect();
+        HyveError::invalid_request(format!("validation failed: {first}"))
+            .with_detail("fields", Value::List(fields))
+    }
+}
+
+impl fmt::Display for Violations {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, v) in self.0.iter().enumerate() {
+            if i > 0 {
+                f.write_str("; ")?;
+            }
+            write!(f, "{}: {}", v.path, v.message)?;
+        }
+        Ok(())
+    }
+}
+
+impl From<Violations> for HyveError {
+    fn from(v: Violations) -> Self {
+        v.into_error()
+    }
+}
+
+/// A path being built while validating nested values.
+#[derive(Debug, Clone)]
+pub struct FieldPath(String);
+
+impl FieldPath {
+    /// The root (`$`).
+    pub fn root() -> Self {
+        FieldPath(String::from("$"))
+    }
+
+    /// Current length, to [`truncate`](Self::truncate) back to after a child.
+    pub fn mark(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Appends `.name`.
+    pub fn push_field(&mut self, json_name: &str) {
+        self.0.push('.');
+        self.0.push_str(json_name);
+    }
+
+    /// Appends `[index]`.
+    pub fn push_index(&mut self, index: usize) {
+        use fmt::Write as _;
+        let _ = write!(self.0, "[{index}]");
+    }
+
+    /// Appends `.key` for a map entry.
+    pub fn push_key(&mut self, key: &str) {
+        self.push_field(key);
+    }
+
+    /// Restores a previous [`mark`](Self::mark).
+    pub fn truncate(&mut self, mark: usize) {
+        self.0.truncate(mark);
+    }
+
+    /// The path text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Types that can check their own invariants.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be validated as a `#[model]` field",
+    label = "not a model type",
+    note = "declare it with `#[model]`, or use a supported type (numbers, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, maps with `String` keys)"
+)]
+///
+/// `#[model]` implements this; std and `hyve-core` types implement it as "always
+/// valid" while still recursing into containers.
+pub trait Validate {
+    /// Records violations of `self` (located at `path`) into `out`.
+    fn validate_at(&self, path: &mut FieldPath, out: &mut Violations);
+
+    /// Validates from the root.
+    fn validate(&self) -> Result<(), Violations> {
+        let mut out = Violations::new();
+        self.validate_at(&mut FieldPath::root(), &mut out);
+        if out.is_empty() { Ok(()) } else { Err(out) }
+    }
+}
+
+macro_rules! always_valid {
+    ($($t:ty),* $(,)?) => {$(
+        impl Validate for $t {
+            fn validate_at(&self, _: &mut FieldPath, _: &mut Violations) {}
+        }
+    )*};
+}
+
+always_valid!(
+    (),
+    bool,
+    char,
+    i8,
+    i16,
+    i32,
+    i64,
+    i128,
+    isize,
+    u8,
+    u16,
+    u32,
+    u64,
+    u128,
+    usize,
+    f32,
+    f64,
+    String,
+    Ulid,
+    Timestamp,
+    Value
+);
+
+impl<T: ?Sized> Validate for Id<T> {
+    fn validate_at(&self, _: &mut FieldPath, _: &mut Violations) {}
+}
+
+impl<T: Validate> Validate for Option<T> {
+    fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+        if let Some(v) = self {
+            v.validate_at(path, out);
+        }
+    }
+}
+
+impl<T: Validate> Validate for Box<T> {
+    fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+        (**self).validate_at(path, out);
+    }
+}
+
+impl<T: Validate> Validate for Vec<T> {
+    fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+        self.as_slice().validate_at(path, out);
+    }
+}
+
+impl<T: Validate, const N: usize> Validate for [T; N] {
+    fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+        self.as_slice().validate_at(path, out);
+    }
+}
+
+impl<T: Validate> Validate for [T] {
+    fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+        for (i, v) in self.iter().enumerate() {
+            let mark = path.mark();
+            path.push_index(i);
+            v.validate_at(path, out);
+            path.truncate(mark);
+        }
+    }
+}
+
+impl<V: Validate> Validate for BTreeMap<String, V> {
+    fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+        for (k, v) in self {
+            let mark = path.mark();
+            path.push_key(k);
+            v.validate_at(path, out);
+            path.truncate(mark);
+        }
+    }
+}
+
+impl<V: Validate, S> Validate for HashMap<String, V, S> {
+    fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+        for (k, v) in self {
+            let mark = path.mark();
+            path.push_key(k);
+            v.validate_at(path, out);
+            path.truncate(mark);
+        }
+    }
+}
+
+/// A value that passed [`Validate`].
+///
+/// The only constructor is [`Valid::new`], so holding a `Valid<T>` proves the
+/// rules held when it was built. Request extractors build it after decoding;
+/// `#[server]` stubs take the plain `T` and the server re-validates.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Valid<T>(T);
+
+impl<T: Validate> Valid<T> {
+    /// Validates `value`; violations become an `invalid_request` error.
+    pub fn new(value: T) -> Result<Self, HyveError> {
+        value.validate().map_err(Violations::into_error)?;
+        Ok(Valid(value))
+    }
+}
+
+impl<T> Valid<T> {
+    /// The validated value.
     pub fn into_inner(self) -> T {
         self.0
     }
@@ -100,95 +340,14 @@ impl<T: Validate> Valid<T> {
 
 impl<T> Deref for Valid<T> {
     type Target = T;
-
-    fn deref(&self) -> &Self::Target {
+    fn deref(&self) -> &T {
         &self.0
     }
 }
 
-/// Helper trait used by `#[model]` to measure string/collection length cleanly.
-pub trait ValidateLen {
-    /// Returns the length used for `#[validate(len = ...)]`.
-    fn validate_len(&self) -> usize;
-}
-
-impl ValidateLen for String {
-    fn validate_len(&self) -> usize {
-        self.chars().count()
-    }
-}
-
-impl ValidateLen for str {
-    fn validate_len(&self) -> usize {
-        self.chars().count()
-    }
-}
-
-impl<T> ValidateLen for Vec<T> {
-    fn validate_len(&self) -> usize {
-        self.len()
-    }
-}
-
-/// Helper trait used by `#[model]` to evaluate `#[validate(range = ...)]` uniformly across integers.
-pub trait ValidateRange {
-    /// Converts `self` to `i128` for inclusive range checking.
-    fn validate_as_i128(&self) -> i128;
-}
-
-macro_rules! impl_validate_range_int {
-    ($($ty:ty),*) => {
-        $(
-            impl ValidateRange for $ty {
-                fn validate_as_i128(&self) -> i128 {
-                    i128::from(*self)
-                }
-            }
-        )*
-    };
-}
-
-impl_validate_range_int!(u8, u16, u32, u64, i8, i16, i32, i64, i128);
-
-impl ValidateRange for usize {
-    fn validate_as_i128(&self) -> i128 {
-        i128::try_from(*self).unwrap_or(i128::MAX)
-    }
-}
-
-/// Helper called by generated `#[model]` code to validate `#[validate(len = min..=max)]`.
-pub fn check_len<V: ValidateLen>(
-    field: &'static str,
-    val: &V,
-    min: usize,
-    max: usize,
-    errors: &mut Vec<ValidationError>,
-) {
-    let actual = val.validate_len();
-    if actual < min || actual > max {
-        errors.push(ValidationError {
-            field,
-            code: "len_out_of_range",
-            message: format!("length {actual} must be within {min}..={max}"),
-        });
-    }
-}
-
-/// Helper called by generated `#[model]` code to validate `#[validate(range = min..=max)]`.
-pub fn check_range<V: ValidateRange>(
-    field: &'static str,
-    val: &V,
-    min: i64,
-    max: i64,
-    errors: &mut Vec<ValidationError>,
-) {
-    let actual = val.validate_as_i128();
-    if actual < i128::from(min) || actual > i128::from(max) {
-        errors.push(ValidationError {
-            field,
-            code: "value_out_of_range",
-            message: format!("value {actual} must be within {min}..={max}"),
-        });
+impl<T> AsRef<T> for Valid<T> {
+    fn as_ref(&self) -> &T {
+        &self.0
     }
 }
 
@@ -197,36 +356,80 @@ mod tests {
     use super::*;
 
     #[derive(Debug)]
-    struct Dummy {
+    struct Input {
+        title: String,
+        tags: Vec<Tag>,
+        fps: Option<u32>,
+    }
+    #[derive(Debug)]
+    struct Tag {
         name: String,
-        fps: u32,
     }
 
-    impl Validate for Dummy {
-        fn validate(&self) -> Result<(), Vec<ValidationError>> {
-            let mut errs = Vec::new();
-            check_len("name", &self.name, 1, 80, &mut errs);
-            check_range("fps", &self.fps, 1, 240, &mut errs);
-            if errs.is_empty() { Ok(()) } else { Err(errs) }
+    impl Validate for Tag {
+        fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+            let m = path.mark();
+            path.push_field("name");
+            rules::len(&self.name, 1..=3, path, out);
+            self.name.validate_at(path, out);
+            path.truncate(m);
+        }
+    }
+
+    impl Validate for Input {
+        fn validate_at(&self, path: &mut FieldPath, out: &mut Violations) {
+            let m = path.mark();
+            path.push_field("title");
+            rules::len(&self.title, 1..=80, path, out);
+            path.truncate(m);
+            path.push_field("tags");
+            self.tags.validate_at(path, out);
+            path.truncate(m);
+            path.push_field("fps");
+            rules::range(&self.fps, 1..=240, path, out);
+            path.truncate(m);
         }
     }
 
     #[test]
-    fn valid_wrapper_accepts_good_and_rejects_bad_inputs() {
-        assert!(
-            Valid::new(Dummy {
-                name: "pbr".into(),
-                fps: 120
-            })
-            .is_ok()
-        );
+    fn valid_input_passes() {
+        let v = Valid::new(Input {
+            title: "ok".into(),
+            tags: vec![Tag { name: "a".into() }],
+            fps: None,
+        })
+        .unwrap();
+        assert_eq!(v.title, "ok");
+    }
 
-        let err = Valid::new(Dummy {
-            name: String::new(),
-            fps: 500,
+    #[test]
+    fn violations_carry_paths_and_params() {
+        let err = Valid::new(Input {
+            title: String::new(),
+            tags: vec![
+                Tag { name: "ok".into() },
+                Tag {
+                    name: "toolong".into(),
+                },
+            ],
+            fps: Some(0),
         })
         .unwrap_err();
         assert_eq!(err.code(), "invalid_request");
-        assert_eq!(err.http_status(), 400);
+        let Some(Value::List(fields)) = err.details().get("fields") else {
+            panic!("{err:?}")
+        };
+        let paths: Vec<_> = fields.iter().map(|f| f.get("path").cloned()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                Some("$.title".into()),
+                Some("$.tags[1].name".into()),
+                Some("$.fps".into())
+            ]
+        );
+        assert_eq!(fields[0].get("min"), Some(&Value::Int(1)));
+        assert_eq!(fields[0].get("max"), Some(&Value::Int(80)));
+        assert_eq!(fields[2].get("rule"), Some(&Value::from("range")));
     }
 }

@@ -1,0 +1,6 @@
+error: asset `/shaders/missing.wgsl` is not a file inside the declaring package
+         = help: check the path relative to Cargo.toml
+ --> tests/ui/asset_missing.rs:2:26
+  |
+2 |     let _ = hyve::asset!("/shaders/missing.wgsl");
+  |                          ^^^^^^^^^^^^^^^^^^^^^^^

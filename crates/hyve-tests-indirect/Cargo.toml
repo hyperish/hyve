@@ -1,0 +1,22 @@
+[package]
+name = "hyve-tests-indirect"
+description = "Checks the macros' `crate = <path>` override from a crate without a direct hyve dependency (fixture crate, not published)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[features]
+## Plays an app's `server` feature: keeps `#[server]` handler bodies.
+server = []
+
+# Deliberately no `hyve` here: everything goes through `hyve_tests::hyve`, as
+# it would through a framework that re-exports `hyve`.
+[dependencies]
+hyve-tests = { path = "../hyve-tests" }
+
+[lints]
+workspace = true

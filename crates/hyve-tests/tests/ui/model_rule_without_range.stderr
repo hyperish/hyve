@@ -1,0 +1,6 @@
+error: a validation rule needs a range
+         = help: write it as `len = 1..=80` or `range = 0.0..=1.0`
+ --> tests/ui/model_rule_without_range.rs:5:16
+  |
+5 |     #[validate(len)]
+  |                ^^^

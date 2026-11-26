@@ -1,15 +1,67 @@
 [workspace]
-members = ["crates/*", "apps/*"]
-resolver = "2"
+members = [
+    "apps/hyve-cli",
+    "crates/hyve",
+    "crates/hyve-api",
+    "crates/hyve-config",
+    "crates/hyve-core",
+    "crates/hyve-diagnostics",
+    "crates/hyve-macros",
+    "crates/hyve-parser",
+    "crates/hyve-serde",
+    "crates/hyve-state",
+    "crates/hyve-tests",
+    "crates/hyve-tests-indirect",
+    "crates/hyve-trace",
+    "crates/hyve-update",
+    "crates/hyve-validate",
+]
+resolver = "3"
 
 [workspace.package]
-version = "0.0.1-alpha.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/hyperish/hyve"
-homepage = "https://github.com/hyperish/hyve"
 authors = ["Hyperish Contributors"]
+
+[workspace.dependencies]
+# Internal crates: path + exact version (hyperish/docs 05-development-rules.md §5).
+hyve = { path = "crates/hyve", version = "=0.1.0-alpha.1" }
+hyve-api = { path = "crates/hyve-api", version = "=0.1.0-alpha.1" }
+hyve-config = { path = "crates/hyve-config", version = "=0.1.0-alpha.1" }
+hyve-core = { path = "crates/hyve-core", version = "=0.1.0-alpha.1" }
+hyve-diagnostics = { path = "crates/hyve-diagnostics", version = "=0.1.0-alpha.1" }
+hyve-macros = { path = "crates/hyve-macros", version = "=0.1.0-alpha.1" }
+hyve-parser = { path = "crates/hyve-parser", version = "=0.1.0-alpha.1" }
+hyve-serde = { path = "crates/hyve-serde", version = "=0.1.0-alpha.1" }
+hyve-state = { path = "crates/hyve-state", version = "=0.1.0-alpha.1" }
+hyve-trace = { path = "crates/hyve-trace", version = "=0.1.0-alpha.1" }
+hyve-update = { path = "crates/hyve-update", version = "=0.1.0-alpha.1" }
+hyve-validate = { path = "crates/hyve-validate", version = "=0.1.0-alpha.1" }
+
+# Pinned third-party crates (docs/02-architecture.md §3).
+ariadne = "=0.6.0"
+# Format control fixed family-wide (docs/02-architecture.md §2.3).
+rkyv = { version = "=0.8.18", default-features = false, features = ["std", "bytecheck", "little_endian", "aligned", "pointer_width_32"] }
+memmap2 = "=0.9.12"
+rustix = { version = "=1.1.6", features = ["fs", "net", "shm", "process"] }
+libc = "=0.2.191"
+windows-sys = "=0.61.2"
+bytemuck = { version = "=1.25.2", features = ["derive", "min_const_generics"] }
+getrandom = "=0.4.3"
+js-sys = "=0.3.107"
+wasm-bindgen-test = "=0.3.80"
+
+# External dependencies, not forked (docs/02-architecture.md §2.5): caret requirements.
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+regex = "=1.13.2"
+syn = { version = "2.0.119", features = ["full"] }
+tokio = { version = "1.47", default-features = false }
+trybuild = "1.0.110"
+tempfile = "=3.27.0"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

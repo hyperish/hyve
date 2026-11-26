@@ -1,0 +1,13 @@
+# {{name}}
+
+A serge app made by `hyve init --template serge-app`.
+
+```sh
+hyve dev --web      # the browser build at http://127.0.0.1:8080/, reloaded on save
+hyve dev --native   # the desktop window
+hyve build          # the optimized web bundle and desktop binary
+```
+
+`hyve dev` runs serge's tool, `hyve-serge`: `cargo install serge-cli --version ={{serge}}`.
+The browser build also needs `rustup target add wasm32-unknown-unknown` and
+`cargo install wasm-bindgen-cli --version ={{wasm_bindgen}}`.

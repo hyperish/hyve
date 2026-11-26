@@ -1,0 +1,6 @@
+[orbic]
+# The database engine `sql!` queries are checked against.
+dialect = "sqlite"
+# Where the server keeps its data. `hyve dev` gives it a local database
+# instead (HYPERISH_ORBIC_DATABASE_URL wins over this line).
+database_url = "sqlite:{{name}}.sqlite?mode=rwc"

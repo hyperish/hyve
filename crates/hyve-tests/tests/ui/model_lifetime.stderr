@@ -1,0 +1,6 @@
+error: `#[model]` types cannot borrow (lifetime parameters are not supported)
+         = help: use owned fields such as `String` and `Vec<T>` instead of `&'a str` and `&'a [T]`
+ --> tests/ui/model_lifetime.rs:4:21
+  |
+4 | pub struct Borrowed<'a> {
+  |                     ^^

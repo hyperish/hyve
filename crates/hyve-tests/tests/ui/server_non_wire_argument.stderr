@@ -1,0 +1,118 @@
+error[E0277]: `Duration` is not a wire type (it has no schema fingerprint)
+ --> tests/ui/server_non_wire_argument.rs:4:30
+  |
+4 | pub async fn schedule(after: std::time::Duration) -> HyveResult<()> {
+  |                              ^^^^^^^^^^^^^^^^^^^ not a wire type
+  |
+  = help: the trait `Fingerprint` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `Fingerprint`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            ErrorWire
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Option<T>
+          and $N others
+  = note: required for `<__hyve_server_schedule as ServerFn>::Request` to implement `Wire`
+note: required by a bound in `hyve::hyve_api::ServerFn::Request`
+ --> $WORKSPACE/crates/hyve-api/src/call.rs
+  |
+  | pub trait ServerFn: Sized + 'static {
+...
+  |     type Request: Wire;
+  |                   ^^^^ required by this bound in `ServerFn::Request`
+
+error[E0277]: `Duration` is not a wire type (it has no schema metadata)
+ --> tests/ui/server_non_wire_argument.rs:4:30
+  |
+4 | pub async fn schedule(after: std::time::Duration) -> HyveResult<()> {
+  |                              ^^^^^^^^^^^^^^^^^^^ not a wire type
+  |
+  = help: the trait `Schema` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `Schema`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Option<T>
+            Page<T>
+          and $N others
+  = note: required for `<__hyve_server_schedule as ServerFn>::Request` to implement `Wire`
+note: required by a bound in `hyve::hyve_api::ServerFn::Request`
+ --> $WORKSPACE/crates/hyve-api/src/call.rs
+  |
+  | pub trait ServerFn: Sized + 'static {
+...
+  |     type Request: Wire;
+  |                   ^^^^ required by this bound in `ServerFn::Request`
+
+error[E0277]: `Duration` has no JSON codec, so it cannot appear in a `#[model]` or `#[server]` signature
+ --> tests/ui/server_non_wire_argument.rs:4:30
+  |
+4 | pub async fn schedule(after: std::time::Duration) -> HyveResult<()> {
+  |                              ^^^^^^^^^^^^^^^^^^^ not a wire type
+  |
+  = help: the trait `hyve::hyve_serde::Json` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `hyve::hyve_serde::Json`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            ErrorBody
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Option<T>
+          and $N others
+  = note: required for `<__hyve_server_schedule as ServerFn>::Request` to implement `Wire`
+note: required by a bound in `hyve::hyve_api::ServerFn::Request`
+ --> $WORKSPACE/crates/hyve-api/src/call.rs
+  |
+  | pub trait ServerFn: Sized + 'static {
+...
+  |     type Request: Wire;
+  |                   ^^^^ required by this bound in `ServerFn::Request`
+
+error[E0277]: `Duration` is not a wire type (it has no schema fingerprint)
+ --> tests/ui/server_non_wire_argument.rs:4:30
+  |
+4 | pub async fn schedule(after: std::time::Duration) -> HyveResult<()> {
+  |                              ^^^^^^^^^^^^^^^^^^^ not a wire type
+  |
+  = help: the trait `Fingerprint` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `Fingerprint`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            ErrorWire
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Option<T>
+          and $N others
+
+error[E0277]: `Duration` is not a wire type (it has no schema metadata)
+ --> tests/ui/server_non_wire_argument.rs:4:30
+  |
+4 | pub async fn schedule(after: std::time::Duration) -> HyveResult<()> {
+  |                              ^^^^^^^^^^^^^^^^^^^ not a wire type
+  |
+  = help: the trait `Schema` is not implemented for `Duration`
+  = note: declare it with `#[model]`, or use a supported type (integers except `usize`/`isize`, floats, `bool`, `char`, `String`, `Ulid`, `Id<T>`, `Timestamp`, `Value`, `Option`, `Vec`, `Box`, arrays, `BTreeMap<String, _>`, `HashMap<String, _>`)
+  = help: the following other types implement trait `Schema`:
+            ()
+            BTreeMap<std::string::String, V>
+            Box<T>
+            CursorParams
+            HashMap<std::string::String, V, S>
+            Id<T>
+            Option<T>
+            Page<T>
+          and $N others

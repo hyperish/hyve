@@ -1,13 +1,38 @@
 [package]
 name = "hyve-core"
-description = "Foundational types, errors, cancellation, context, and lock-free ring buffers for the Hyperish family"
+description = "Foundational contracts for the Hyperish family: errors, IDs, time, cancellation, scopes, ring buffers"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 authors.workspace = true
+
+[features]
+shm = ["dep:memmap2", "dep:rustix", "dep:libc", "windows-security", "windows-sys?/Win32_System_Memory"]
+windows-security = ["dep:windows-sys"]
+
+[target.'cfg(any(target_os = "macos",target_os = "ios",target_os = "linux",target_os = "android"))'.dependencies]
+memmap2 = { workspace = true, optional = true }
+rustix = { workspace = true, optional = true }
+
+[target.'cfg(any(target_os = "macos",target_os = "ios"))'.dependencies]
+libc = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, optional = true, features = ["Win32_Foundation", "Win32_Security_Authorization", "Win32_System_Threading"] }
+
+[dependencies]
+bytemuck.workspace = true
+getrandom.workspace = true
+rkyv.workspace = true
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
+js-sys.workspace = true
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+wasm-bindgen-test.workspace = true
 
 [lints]
 workspace = true

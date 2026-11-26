@@ -1,0 +1,72 @@
+//! {{name}}: notes in a database, over HTTP (`GET`/`POST /v1/notes`).
+
+use hyve::prelude::*;
+use orbic::prelude::*;
+
+#[model]
+#[table("notes")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Note {
+    #[pk]
+    pub id: Id<Note>,
+    pub body: String,
+}
+
+#[model]
+pub struct NewNote {
+    #[validate(len = 1..=200)]
+    pub body: String,
+}
+
+async fn list_notes(db: Ctx<Db>) -> OrbicResult<Vec<Note>> {
+    db.query::<Note>().fetch_all().await
+}
+
+async fn create_note(db: Ctx<Db>, input: Valid<NewNote>) -> OrbicResult<Note> {
+    db.insert(Note {
+        id: Id::new(),
+        body: input.into_inner().body,
+    })
+    .await
+}
+
+/// The app: every route under `/v1`. The provided cache remembers
+/// `Idempotency-Key` replies of `POST` routes.
+pub fn app(db: Db, cache: Cache) -> OrbicApp {
+    OrbicApp::new().provide(db).provide(cache).mount(
+        "/v1",
+        component()
+            .get("/notes", list_notes)
+            .post("/notes", create_note),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[hyve::test]
+    async fn notes_are_created_and_listed() {
+        // An in-memory database with the migrations in `migrations/`.
+        let client = TestClient::new(app(Db::in_memory().await, Cache::in_memory()));
+
+        let created = client
+            .post("/v1/notes")
+            .json(&NewNote { body: "first".into() })
+            .send()
+            .await;
+        assert!(created.status().is_success(), "{}", created.status());
+
+        let empty = client
+            .post("/v1/notes")
+            .json(&NewNote { body: String::new() })
+            .send()
+            .await;
+        assert_eq!(empty.status(), 400);
+
+        let listed = client.get("/v1/notes").send().await;
+        let notes: Vec<Note> = listed.json();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].body, "first");
+    }
+}

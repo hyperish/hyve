@@ -1,0 +1,17 @@
+# {{name}}
+
+A full-stack app made by `hyve init`: a serge UI (browser and desktop) and
+the orbic backend it calls through `#[server]` functions.
+
+```sh
+hyve dev --web    # page at http://127.0.0.1:8080/ and the backend, reloaded on save
+hyve dev          # the same, plus the desktop window
+hyve test         # create, validate, and list notes on an in-memory database
+```
+
+Tables are created by the `.sql` files in `migrations/`, applied in name order.
+
+`hyve dev` runs the frameworks' tools: `cargo install serge-cli --version ={{serge}}`
+and `cargo install orbic-cli --version ={{orbic}}`. The browser build also needs
+`rustup target add wasm32-unknown-unknown` and
+`cargo install wasm-bindgen-cli --version ={{wasm_bindgen}}`.

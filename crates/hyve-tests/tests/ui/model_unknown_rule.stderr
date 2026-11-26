@@ -1,0 +1,6 @@
+error: unknown validation rule `prefix`
+         = help: use `len = <range>`, `range = <range>`, `pattern = "..."` or `check = path`
+ --> tests/ui/model_unknown_rule.rs:5:16
+  |
+5 |     #[validate(prefix = "user")]
+  |                ^^^^^^

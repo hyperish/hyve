@@ -1,7 +1,7 @@
 /target
 **/*.rs.bk
-Cargo.lock
 .env
 .env.*
 !.env.example
 .DS_Store
+/apps/hyve-bench/target

@@ -1,23 +1,51 @@
 [package]
 name = "hyve"
-description = "All-in-one Rust core development framework and toolchain foundation for the Hyperish family"
+description = "All-in-one Rust core for the Hyperish family: models, validation, codecs, reactive state and contracts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 authors.workspace = true
 readme = "../../README.md"
-keywords = ["hyperish", "framework", "core", "toolchain", "reactive"]
-categories = ["development-tools"]
+keywords = ["hyperish", "framework", "model", "reactive", "validation"]
+categories = ["development-tools", "encoding", "web-programming"]
+
+[features]
+## Signed delta updates for native applications.
+update = ["dep:hyve-update"]
+## Same-user Unix sockets or Windows named pipes for local RPC.
+ipc = ["hyve-core/windows-security", "dep:tokio", "tokio/net", "dep:rustix", "dep:windows-sys"]
+## Kernel-backed shared telemetry rings on Unix and Windows.
+shm = ["hyve-core/shm"]
+## Runtime for `#[hyve::test]` (native only). Enable it for tests:
+## `[dev-dependencies] hyve = { version = "…", features = ["test"] }`.
+test = ["dep:tokio"]
 
 [dependencies]
-hyve-core = { path = "../hyve-core", version = "0.0.1-alpha.0" }
-hyve-macros = { path = "../hyve-macros", version = "0.0.1-alpha.0" }
-hyve-serde = { path = "../hyve-serde", version = "0.0.1-alpha.0" }
-hyve-state = { path = "../hyve-state", version = "0.0.1-alpha.0" }
-hyve-validate = { path = "../hyve-validate", version = "0.0.1-alpha.0" }
+hyve-api.workspace = true
+hyve-config.workspace = true
+hyve-core.workspace = true
+hyve-diagnostics.workspace = true
+hyve-macros.workspace = true
+hyve-parser.workspace = true
+hyve-serde.workspace = true
+hyve-state.workspace = true
+hyve-trace.workspace = true
+hyve-validate.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+hyve-update = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["rt", "time"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, optional = true, features = ["Win32_Foundation", "Win32_Security_Authorization", "Win32_System_Threading", "Win32_System_Pipes"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { workspace = true, features = ["io-util", "rt", "time"] }
 
 [lints]
 workspace = true

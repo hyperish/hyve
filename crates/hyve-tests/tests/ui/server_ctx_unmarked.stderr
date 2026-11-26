@@ -1,0 +1,6 @@
+error: `Ctx<Db>` is provided by the server, not sent by the caller
+         = help: mark it `#[server_ctx] db: Ctx<Db>`
+ --> tests/ui/server_ctx_unmarked.rs:6:25
+  |
+6 | pub async fn create(db: Ctx<Db>) -> HyveResult<()> {
+  |                         ^^^

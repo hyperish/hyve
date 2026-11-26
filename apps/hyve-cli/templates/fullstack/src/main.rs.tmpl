@@ -1,0 +1,9 @@
+//! The desktop app: `hyve dev` opens it next to the backend. It calls
+//! `SERGE_API_URL` (default `http://127.0.0.1:3000/v1`).
+
+use serge::prelude::*;
+
+fn main() {
+    let url = std::env::var("SERGE_API_URL").unwrap_or_else(|_| "http://127.0.0.1:3000/v1".into());
+    {{crate}}::app(RemoteTransport::new(&url).into_arc()).run();
+}

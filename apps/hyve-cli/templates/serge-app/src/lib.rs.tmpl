@@ -1,0 +1,43 @@
+//! {{name}}: one UI for the browser and the desktop.
+
+use hyve::prelude::*;
+use serge::prelude::*;
+
+#[component]
+pub fn Counter() -> Element {
+    let mut count = signal(0);
+    ui! {
+        Card { padding: 16px, gap: 12px,
+            Text { font_size: 20px, font_weight: 700, "{{name}}" }
+            Text { "Count: {count()}" }
+            Button {
+                text: "Increment",
+                clicked => { count += 1; }
+            }
+        }
+    }
+}
+
+/// The app: its screens, by route.
+pub fn app() -> SergeApp {
+    SergeApp::new()
+        .title("{{name}}")
+        .feature(feature().route("/", Counter))
+}
+
+/// The browser entry.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn start() {
+    app().run();
+}
+
+/// The Android NativeActivity entry.
+#[cfg(target_os = "android")]
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+fn android_main(host: serge::android::AndroidApp) {
+    if let Err(error) = serge::android::launch(host, app()) {
+        eprintln!("Serge activity failed: {error}");
+    }
+}

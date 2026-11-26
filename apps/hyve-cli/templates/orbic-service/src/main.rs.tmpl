@@ -1,0 +1,33 @@
+//! The server: `hyve dev` runs it with a local database; `cargo run`
+//! uses `[orbic] database_url` in hyve.toml. It listens on `APP_ADDR`
+//! (default `127.0.0.1:3000`).
+
+use orbic::{Cache, Db, Migrations};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let db = Db::from_config().await?;
+    db.migrate(&Migrations::from_dir("migrations".as_ref())?)
+        .await?;
+    #[cfg(feature = "cache-redis")]
+    let cache = Cache::from_env().await?;
+    #[cfg(not(feature = "cache-redis"))]
+    let cache = {
+        let replicas = std::env::var("HYPERISH_ORBIC_REPLICAS").unwrap_or_else(|_| "1".into());
+        if replicas.parse::<u32>()? != 1 || std::env::var_os("HYPERISH_ORBIC_CACHE_URL").is_some() {
+            return Err("build with --features cache-redis,orbic/cache-redis for a shared cache".into());
+        }
+        Cache::in_memory()
+    };
+    let addr = std::env::var("APP_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into());
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    println!(
+        "{{name}} on http://{}/v1/notes (Ctrl-C stops)",
+        listener.local_addr()?
+    );
+    orbic::serve({{crate}}::app(db, cache), listener, async {
+        let _ = tokio::signal::ctrl_c().await;
+    })
+    .await?;
+    Ok(())
+}

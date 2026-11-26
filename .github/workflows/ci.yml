@@ -1,17 +1,24 @@
 name: CI
 
 on:
+  workflow_call:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
   pull_request:
     branches: [main]
 
 env:
+  # Use the sibling revisions exercised together in platform acceptance.
+  ORBIC_REF: d606b1a03405d83c4ac086c58d8d8c2434237474
+  SERGE_REF: d58cdedd6fc7aa71c1532b3c2e709819d9e70ba8
   CARGO_TERM_COLOR: always
+  # Must match `rust-version` in Cargo.toml (hyperish/docs 05-development-rules.md §8).
+  MSRV: "1.85"
+  WASM_BINDGEN_VERSION: "0.2.130"
 
 jobs:
   check:
-    name: Format, Clippy & Test
+    name: Format, Clippy & Test (stable)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +29,205 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Compare compatible and breaking API changes using the actual schema export
+        run: |
+          GOBIN="$RUNNER_TEMP" go install github.com/oasdiff/oasdiff@v1.41.0
+          HYVE_OASDIFF="$RUNNER_TEMP/oasdiff" cargo test --locked -p hyve-cli --test cli lint_compares_a_fresh_export_against_the_released_api -- --ignored --exact
+      - name: Lint and test shared memory across processes
+        run: |
+          cargo clippy -p hyve-core --all-targets --features shm --locked -- -D warnings
+          cargo test -p hyve-core --features shm --test mapped --locked
+      # The fixture crates play an app's shared crate; `#[server]` handler
+      # bodies exist only with their `server` feature, so test both builds.
+      - name: Lint and test with the server feature
+        run: |
+          cargo clippy -p hyve-tests -p hyve-tests-indirect --all-targets --features hyve-tests/server,hyve-tests-indirect/server --locked -- -D warnings
+          cargo test -p hyve-tests -p hyve-tests-indirect --features hyve-tests/server,hyve-tests-indirect/server --locked
+      # Every public crate packages and builds from its package alone
+      # (docs/05-implementation-plan.md §3, 배포 가능성).
+      - name: Package the public crates
+        run: cargo package --workspace --exclude hyve-tests --exclude hyve-tests-indirect --locked
+
+  ipc:
+    name: Local IPC on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p hyve --features ipc --test ipc --locked
+      - run: cargo test -p hyve-core --features shm --test mapped --test mapped_windows --locked
+
+  windows-packages:
+    name: Install and run WiX and NSIS packages
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-packager --version 0.11.8 --locked
+      - run: cargo build --locked -p hyve-cli
+      - name: Sign, install and verify both packages with a disposable runner identity
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Hyve installer test' -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(2)
+          $file = Join-Path $env:RUNNER_TEMP 'hyve-installer-test.cer'
+          try {
+            Export-Certificate -Cert $cert -FilePath $file | Out-Null
+            Import-Certificate -FilePath $file -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+            $env:HYVE_TEST_WINDOWS_SIGNING_CERT = $cert.Thumbprint
+            python -u apps/hyve-cli/tests/windows_packages.py target/debug/hyve.exe
+            if ($LASTEXITCODE) { throw 'Windows installer verification failed' }
+          } finally {
+            Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
+            Remove-Item "Cert:\LocalMachine\Root\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
+            Remove-Item $file -ErrorAction SilentlyContinue
+          }
+
+  fullstack:
+    name: Generated fullstack notes with ${{ matrix.source }} crates
+    strategy:
+      matrix:
+        source: [registry, siblings]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/serge
+          ref: ${{ env.SERGE_REF }}
+          path: serge
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: hyve
+      - name: Create the app and run its tests
+        shell: bash
+        env:
+          SOURCE: ${{ matrix.source }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/hyve/target
+        run: |
+          cargo build --manifest-path hyve/Cargo.toml --locked -p hyve-cli
+          export PATH="$CARGO_TARGET_DIR/debug:$PATH"
+          hyve init notes-app
+          if [[ "$SOURCE" == siblings ]]; then
+            mkdir -p .cargo
+            cat > .cargo/config.toml <<'TOML'
+          [patch.crates-io]
+          hyve = { path = "hyve/crates/hyve" }
+          orbic = { path = "orbic/crates/orbic" }
+          serge = { path = "serge/crates/serge" }
+          TOML
+          fi
+          cd notes-app
+          hyve test | tee "$RUNNER_TEMP/notes-test.log"
+          for test in creating_a_note_persists_its_id_and_body invalid_notes_are_rejected_without_writing_a_row notes_are_created_and_listed; do
+            grep -Fx "test $test ... ok" "$RUNNER_TEMP/notes-test.log"
+          done
+
+  ios:
+    name: Package and launch a generated iOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/serge
+          ref: ${{ env.SERGE_REF }}
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            hyve
+            serge
+      - name: Install the matching Rust target and build the tools
+        run: |
+          case "$(uname -m)" in
+            arm64) rustup target add aarch64-apple-ios-sim ;;
+            x86_64) rustup target add x86_64-apple-ios ;;
+          esac
+          cargo build --manifest-path hyve/Cargo.toml --locked -p hyve-cli
+          cargo build --manifest-path serge/Cargo.toml --locked -p serge-cli
+      - name: Build and run a freshly generated simulator app
+        run: |
+          export PATH="$GITHUB_WORKSPACE/hyve/target/debug:$GITHUB_WORKSPACE/serge/target/debug:$PATH"
+          hyve init ios-counter --template serge-app
+          mkdir -p .cargo
+          cat > .cargo/config.toml <<'TOML'
+          [patch.crates-io]
+          hyve = { path = "hyve/crates/hyve" }
+          serge = { path = "serge/crates/serge" }
+          TOML
+          cp serge/apps/serge-playground/src/platform_widgets.rs ios-counter/src/platform_widgets.rs
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          manifest = Path("ios-counter/Cargo.toml")
+          manifest.write_text(manifest.read_text().replace("[package.metadata.serge]", '[package.metadata.serge]\nwidgets = ["src/platform_widgets.rs"]\nandroid_package = "org.example.counter"'))
+          PYTHON
+          cd ios-counter
+          hyve build --debug --format ios-sim
+          bundle=target/debug/ios/ios-counter/simulator/ios-counter.app
+          test -x "$bundle/PlugIns/SergeWidgets.appex/SergeWidgets"
+          nm -gU "$bundle/ios-counter" | grep -E '_serge_widget_publish_v1$'
+          python3 ../hyve/apps/hyve-cli/tests/ios_simulator.py "$bundle"
+
+  msrv:
+    name: Build on the declared minimum Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Check (native)
+        run: cargo check --workspace --locked
+      - name: Check (wasm32)
+        run: cargo check --workspace --locked --target wasm32-unknown-unknown --exclude hyve-cli
+
+  wasm:
+    name: Tests on wasm32 (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-bindgen test runner
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
+      - name: Run wasm32 tests
+        # The fixture crates use `#[hyve::test]`, a compile-time error on wasm32 in Phase 1.
+        run: cargo test --workspace --locked --target wasm32-unknown-unknown --exclude hyve-cli --exclude hyve-macros --exclude hyve-tests --exclude hyve-tests-indirect
+      - name: Check shared model rules on wasm32
+        run: cargo test --locked -p hyve-tests --target wasm32-unknown-unknown --test predicates

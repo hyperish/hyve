@@ -1,6 +1,6 @@
 # 00. 개요와 범위 (hyve)
 
-> 상태: 역할·범위·레퍼런스는 **확정**, 세부 모듈 경계 및 구현 Phase 컷은 **제안** · 기준일: 2026-11-19
+> 상태: 역할·범위·레퍼런스는 **확정**, 세부 모듈 경계 및 구현 Phase 컷은 **제안** · 기준일: 2026-11-24
 
 `hyve`는 하이퍼리쉬 프레임워크 패밀리(`hyve`, `orbic`, `serge`)의 중심축이자, 모든 레이어가 수직 통합을 위해 기준(`ref`)으로 삼는 **올인원(All-in-One) 코어 프레임워크 및 개발 툴체인** 레포입니다. 공통 추상 계약은 [`hyperish/docs`](https://github.com/hyperish/docs)를 따릅니다.
 
@@ -9,7 +9,7 @@
 JS 생태계에서 Node.js + npm + webpack + jest + 수많은 서드파티 패키지의 파편화를 **Bun**이 단일 고속 런타임·툴체인·내장 표준 API로 통합했듯, **`hyve`는 기존 Rust/Cargo 생태계의 파편화를 수직 통합으로 해결**합니다.
 
 1. **올인원 개발 툴체인 (Toolchain & CLI — `bun` CLI 포지션)**
-   - 프로젝트 스캐폴딩(`hyve init`), 실시간 핫리로드·미리보기(`hyve preview`), 정적 분석·포맷·진단(`hyve lint`), 고속 단위·통합·매크로 진단 테스트(`hyve test`), 타깃별 프로덕션 빌드·패키징(`hyve build`, 내부에 `codegen` 단계 포함)까지 개발 전 주기를 외부 플러그인 조합 없이 단일 바이너리로 관리합니다(대표 명령 목록과 `build`/`codegen` 관계는 [`01-dx-and-dsl.md`](01-dx-and-dsl.md) §2 참조).
+   - 프로젝트 스캐폴딩(`hyve init`), 로컬 개발 환경 실행과 소스 변경 반영(`hyve dev`), 정적 분석·포맷·진단(`hyve lint`), 고속 단위·통합·매크로 진단 테스트(`hyve test`), 타깃별 프로덕션 빌드·패키징(`hyve build`, 내부에 `codegen` 단계 포함)까지 개발 전 주기를 외부 플러그인 조합 없이 단일 바이너리로 관리합니다(대표 명령 목록과 `build`/`codegen` 관계는 [`01-dx-and-dsl.md`](01-dx-and-dsl.md) §2 참조).
 2. **기본 내장 범용 코어 모듈 (`core` ref — `Bun.*` 내장 API 포지션)**
    - 웹·서버 개발에만 쓰이는 도구가 아니라, 그래픽 엔진·네이티브 앱·CLI·시스템 연산 등 **모든 Rust 범용 개발**에서 반복되는 기반 모듈을 내장합니다.
    - **상태성(State & Reactivity — `signal(init)`)**: UI(`serge`), 백엔드(`orbic`), 엔진·도메인 로직이 공통으로 참조하는 직관적인 신호(`signal(0)`)·상태 그래프·수명 모델.
@@ -33,7 +33,7 @@ JS 생태계에서 Node.js + npm + webpack + jest + 수많은 서드파티 패�
 ## 3. 책임 경계: 소유하는 것과 소유하지 않는 것
 
 - **소유함**:
-  - 타깃 중립 코어 모델(`hyve-core`), 상태성(`hyve-state`), 직렬화(`hyve-serde`), 검증(`hyve-validate`), 설정(`hyve-config`), 추적(`hyve-trace`), 파서(`hyve-parser`), 규격 인터페이스(`hyve-api`), 범용 매크로(`hyve-macros`), 통합 CLI(`hyve-cli`).
+  - 타깃 중립 코어 모델(`hyve-core`), 상태성(`hyve-state`), 직렬화(`hyve-serde`), 검증(`hyve-validate`), 설정(`hyve-config`), 추적(`hyve-trace`), 파서(`hyve-parser`), 규격 인터페이스(`hyve-api`), 진단(`hyve-diagnostics`), 범용 매크로(`hyve-macros`), 통합 CLI(`hyve-cli`).
 - **소유하지 않음**:
   - 백엔드 전용 인프라·DB·MSA·WS/WT·OpenAPI 런타임(`orbic` 소관)
   - UI 선언적 뷰 DSL(`ui!`) 및 브라우저 DOM·SSR·네이티브 GPU/CPU UI 렌더러(`serge` 소관)

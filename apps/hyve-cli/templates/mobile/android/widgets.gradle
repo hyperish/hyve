@@ -1,0 +1,108 @@
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
+
+plugins {
+    id 'com.android.application' version '8.8.2'
+    id 'com.android.library' version '8.8.2' apply false
+    id 'org.jetbrains.kotlin.android' version '2.1.10' apply false
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.1.10' apply false
+}
+
+def factory = DocumentBuilderFactory.newInstance()
+factory.namespaceAware = true
+factory.setFeature('http://apache.org/xml/features/disallow-doctype-decl', true)
+def manifest = factory.newDocumentBuilder().parse(file('native-manifest.xml'))
+def root = manifest.documentElement
+def androidUri = 'http://schemas.android.com/apk/res/android'
+def packageId = root.getAttribute('package')
+def appVersion = root.getAttributeNS(androidUri, 'versionName')
+def code = root.getAttributeNS(androidUri, 'versionCode').toInteger()
+def sdk = root.getElementsByTagName('uses-sdk').item(0)
+def minVersion = sdk.getAttributeNS(androidUri, 'minSdkVersion').toInteger()
+def targetVersion = sdk.getAttributeNS(androidUri, 'targetSdkVersion').toInteger()
+root.removeAttribute('package')
+def widgets = System.getenv('HYVE_ANDROID_WIDGETS') != null
+def layoutSupport = System.getenv('HYVE_ANDROID_WINDOW_LAYOUT') == '1'
+def application = root.getElementsByTagName('application').item(0)
+if (widgets || file('src/main/java').isDirectory()) application.setAttributeNS(androidUri, 'android:hasCode', 'true')
+def usesPermission = { permission ->
+    if (!root.getElementsByTagName('uses-permission').any { it.getAttributeNS(androidUri, 'name') == permission }) {
+        def element = manifest.createElement('uses-permission')
+        element.setAttributeNS(androidUri, 'android:name', permission)
+        root.insertBefore(element, application)
+    }
+}
+if (file('src/main/java/org/hyperish/serge/notifications/Actions.java').isFile()) {
+    usesPermission('android.permission.POST_NOTIFICATIONS')
+    def receiver = manifest.createElement('receiver')
+    receiver.setAttributeNS(androidUri, 'android:name', 'org.hyperish.serge.notifications.Actions')
+    receiver.setAttributeNS(androidUri, 'android:exported', 'false')
+    application.appendChild(receiver)
+}
+if (file('src/main/java/org/hyperish/serge/background/WorkService.java').isFile()) {
+    usesPermission('android.permission.FOREGROUND_SERVICE')
+    def service = manifest.createElement('service')
+    service.setAttributeNS(androidUri, 'android:name', 'org.hyperish.serge.background.WorkService')
+    service.setAttributeNS(androidUri, 'android:exported', 'false')
+    service.setAttributeNS(androidUri, 'android:foregroundServiceType', 'shortService')
+    application.appendChild(service)
+}
+def source = file('src/main/AndroidManifest.xml')
+source.parentFile.mkdirs()
+TransformerFactory.newInstance().newTransformer().transform(new DOMSource(manifest), new StreamResult(source))
+
+if (widgets) project(':sergeWidgets').layout.buildDirectory.set(layout.buildDirectory.dir('widgets'))
+
+android {
+    namespace = packageId + '.sergehost'
+    compileSdk = Math.max(35, targetVersion)
+    defaultConfig {
+        def nativeABIs = file('original/lib').listFiles().findAll { it.isDirectory() }.collect { it.name }
+        if (nativeABIs.empty) throw new GradleException('the NativeActivity has no libraries')
+        ndk { abiFilters.addAll(nativeABIs) }
+        applicationId = packageId
+        minSdk = minVersion
+        targetSdk = targetVersion
+        versionCode = code
+        versionName = appVersion
+    }
+    sourceSets.main {
+        jniLibs.srcDirs = [file('original/lib')]
+        assets.srcDirs = [file('original/assets')]
+        def resources = System.getenv('HYVE_ANDROID_RESOURCES')
+        if (resources != null) res.srcDirs = [file(resources)]
+    }
+    def overlay = System.getenv('HYVE_ANDROID_OVERLAY')
+    if (overlay != null) {
+        sourceSets.debug.manifest.srcFile(file(overlay))
+        sourceSets.release.manifest.srcFile(file(overlay))
+    }
+    signingConfigs {
+        selected {
+            storeFile = file(System.getenv('HYVE_ANDROID_STORE'))
+            storePassword = System.getenv('HYVE_ANDROID_PASSWORD')
+            keyAlias = System.getenv('HYVE_ANDROID_ALIAS')
+            keyPassword = System.getenv('HYVE_ANDROID_PASSWORD')
+        }
+    }
+    buildTypes {
+        debug.signingConfig = signingConfigs.selected
+        release.signingConfig = signingConfigs.selected
+    }
+    // cargo-apk has already applied the developer's Rust strip policy.
+    packaging.jniLibs.keepDebugSymbols += ['**/*.so']
+}
+dependencies {
+    if (widgets) implementation project(':sergeWidgets')
+    if (file('src/main/java/org/hyperish/serge/webview/LocalWebView.java').isFile()) {
+        implementation 'androidx.webkit:webkit:1.12.1'
+    }
+    if (layoutSupport) {
+        implementation 'androidx.window:window-java:1.3.0'
+        // WindowManager's Java API exposes this Consumer but publishes core at runtime scope.
+        implementation 'androidx.core:core:1.8.0'
+        compileOnly 'androidx.annotation:annotation:1.7.0'
+    }
+}

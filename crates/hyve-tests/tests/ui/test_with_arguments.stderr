@@ -1,0 +1,6 @@
+error: test functions take no arguments
+         = help: build what the test needs inside its body
+ --> tests/ui/test_with_arguments.rs:2:22
+  |
+2 | async fn needs_input(x: u32) {
+  |                      ^
