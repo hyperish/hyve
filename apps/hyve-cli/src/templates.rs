@@ -42,9 +42,16 @@ pub(crate) fn render(template: &str, name: &str) -> Vec<(String, String)> {
         "orbic-service" => ORBIC_SERVICE,
         other => unreachable!("unknown template `{other}`"),
     };
+    let ios: &[(&str, &str)] = if matches!(template, "fullstack" | "serge-app") {
+        files!("mobile": "ios/App.xcodeproj/project.pbxproj", "ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme", "ios/build-rust.sh", "ios/ExportOptions.plist")
+    } else {
+        &[]
+    };
     let krate = name.replace('-', "_");
+    let bundle_name = name.replace('_', "-").to_ascii_lowercase();
     files
         .iter()
+        .chain(ios)
         .map(|(path, text)| {
             let path = if *path == "gitignore" {
                 ".gitignore".to_owned()
@@ -54,6 +61,7 @@ pub(crate) fn render(template: &str, name: &str) -> Vec<(String, String)> {
             let text = text
                 .replace("{{name}}", name)
                 .replace("{{crate}}", &krate)
+                .replace("{{bundle_name}}", &bundle_name)
                 .replace("{{hyve}}", HYVE)
                 .replace("{{orbic}}", ORBIC)
                 .replace("{{serge}}", SERGE)
@@ -107,7 +115,7 @@ mod tests {
             "{manifest}"
         );
         let main = &files.iter().find(|(p, _)| p == "src/main.rs").unwrap().1;
-        assert!(main.contains("my_app::app(db)"), "{main}");
+        assert!(main.contains("my_app::app(db, cache)"), "{main}");
         assert!(files.iter().any(|(p, _)| p == ".gitignore"));
     }
 

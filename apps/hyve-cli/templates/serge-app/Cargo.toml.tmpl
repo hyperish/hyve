@@ -15,6 +15,27 @@ serge = "={{serge}}"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "={{wasm_bindgen}}"
 
-# `hyve preview --web` bundles this package for the browser.
+# `hyve dev --web` bundles this package for the browser.
 [package.metadata.serge]
 web = true
+export = "{{name}}"
+
+[package.metadata.packager]
+identifier = "org.example.{{bundle_name}}"
+binaries = [{ path = "{{name}}", main = true }]
+
+[package.metadata.android]
+package = "org.example.{{crate}}"
+build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "{{name}}"
+
+[package.metadata.ios]
+project = "ios/App.xcodeproj"
+scheme = "App"
+export_options = "ios/ExportOptions.plist"

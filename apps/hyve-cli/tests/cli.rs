@@ -70,8 +70,7 @@ fn help_and_version() {
     );
     let help = String::from_utf8_lossy(&hyve(&d, &["--help"]).stdout).into_owned();
     assert!(help.contains("Usage: hyve <command>"), "{help}");
-    // Only `lint` is unimplemented; the help must not say otherwise of the
-    // commands that work.
+    assert!(help.contains("dev [--web] [--native]"), "{help}");
     assert!(!help.contains("not in this release"), "{help}");
     let o = hyve(&d, &[]);
     assert_eq!(o.status.code(), Some(2), "no command is a usage error");
@@ -102,7 +101,14 @@ fn unknown_commands_and_options_are_usage_errors() {
         "build is optimized by default; --release is unknown"
     );
     assert_eq!(hyve(&d, &["codegen", "--fix"]).status.code(), Some(2));
-    assert_eq!(hyve(&d, &["preview", "--desktop"]).status.code(), Some(2));
+    assert_eq!(hyve(&d, &["dev", "--desktop"]).status.code(), Some(2));
+    let o = hyve(&d, &["preview", "--web"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        stderr(&o).contains("renamed to `hyve dev`"),
+        "{}",
+        stderr(&o)
+    );
     assert_eq!(hyve(&d, &["lint", "--fix"]).status.code(), Some(2));
 }
 
@@ -120,15 +126,20 @@ fn unknown_templates_are_usage_errors() {
 }
 
 #[test]
-fn unimplemented_commands_never_succeed() {
-    let d = temp(&[]);
-    let o = hyve(&d, &["lint"]);
-    assert_eq!(o.status.code(), Some(3));
-    assert!(
-        stderr(&o).contains("is not implemented in this release"),
-        "{}",
-        stderr(&o)
-    );
+fn lint_runs_format_and_clippy_on_the_workspace() {
+    let d = crate_dir("linted", "pub fn answer() -> i32 {\n    42\n}\n");
+    let clean = hyve(&d, &["lint"]);
+    assert!(clean.status.success(), "{}", stderr(&clean));
+    std::fs::write(d.join("src/lib.rs"), "pub fn unformatted()->i32{3}\n").unwrap();
+    assert!(!hyve(&d, &["lint"]).status.success());
+    std::fs::write(
+        d.join("src/lib.rs"),
+        "pub fn answer() -> i32 {\n    return 42;\n}\n",
+    )
+    .unwrap();
+    let clippy = hyve(&d, &["lint"]);
+    assert!(!clippy.status.success());
+    assert!(stderr(&clippy).contains("return"), "{}", stderr(&clippy));
 }
 
 #[test]
@@ -137,6 +148,8 @@ fn init_writes_a_template_and_never_overwrites() {
     // The default template is `fullstack`; the directory names the package.
     let o = hyve(&d, &["init", "notes-app"]);
     assert!(o.status.success(), "{}", stderr(&o));
+    let next = String::from_utf8_lossy(&o.stdout);
+    assert!(next.contains("cd notes-app && hyve dev --web"), "{next}");
     let app = d.join("notes-app");
     let manifest = std::fs::read_to_string(app.join("Cargo.toml")).unwrap();
     assert!(manifest.contains("name = \"notes-app\""), "{manifest}");
@@ -241,10 +254,125 @@ fn test_and_build_exit_codes_follow_cargo() {
 }
 
 #[test]
+fn test_enables_declared_server_features_for_selected_packages() {
+    let d = temp(&[
+        (
+            "Cargo.toml",
+            "[workspace]\nmembers = [\"notes-app\", \"ui\"]\nexclude = [\"legacy\"]\nresolver = \"3\"\n",
+        ),
+        (
+            "notes-app/Cargo.toml",
+            r#"
+[package]
+name = "notes-app"
+version = "0.1.0"
+edition = "2024"
+[features]
+server = []
+sqlite = []
+[package.metadata.orbic.server]
+features = ["server", "sqlite"]
+"#,
+        ),
+        ("notes-app/src/lib.rs", ""),
+        (
+            "notes-app/tests/notes.rs",
+            "#![cfg(all(feature = \"server\", feature = \"sqlite\"))]\n#[test] fn notes() {}",
+        ),
+        (
+            "ui/Cargo.toml",
+            r#"
+[package]
+name = "ui"
+version = "0.1.0"
+edition = "2024"
+[features]
+server = []
+[dependencies]
+legacy = { package = "notes-app", path = "../legacy" }
+"#,
+        ),
+        (
+            "ui/src/lib.rs",
+            "#[cfg(feature = \"server\")] compile_error!(\"unexpected server feature\");\n#[test] fn renders() {}",
+        ),
+        (
+            "legacy/Cargo.toml",
+            "[package]\nname = \"notes-app\"\nversion = \"0.0.1\"\nedition = \"2024\"",
+        ),
+        ("legacy/src/lib.rs", "#[test] fn legacy() {}"),
+    ]);
+
+    for (args, expected) in [
+        (vec!["test"], vec!["notes", "renders"]),
+        (
+            vec!["test", "-p", "notes-*", "--", "--exact", "notes"],
+            vec!["notes"],
+        ),
+        (vec!["test", "-p", "ui"], vec!["renders"]),
+        (vec!["test", "-p", "notes-app@0.0.1"], vec!["legacy"]),
+    ] {
+        let o = hyve(&d, &args);
+        assert!(o.status.success(), "{args:?}: {}", stderr(&o));
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        for test in ["notes", "renders", "legacy"] {
+            assert_eq!(
+                stdout.contains(&format!("test {test} ... ok")),
+                expected.contains(&test),
+                "{args:?}: {stdout}"
+            );
+        }
+    }
+}
+
+#[test]
 fn codegen_without_frameworks_has_nothing_to_do() {
     let d = crate_dir("plain", "");
     assert!(hyve(&d, &["codegen"]).status.success());
     assert!(hyve(&d, &["codegen", "--check"]).status.success());
+}
+
+#[test]
+#[ignore = "requires oasdiff v1.41.0 on PATH or HYVE_OASDIFF"]
+fn lint_compares_a_fresh_export_against_the_released_api() {
+    let root = crate_dir("api_fixture", "");
+    let mut toml = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    toml.push_str("\n[workspace.metadata.hyve.api]\nbaseline='released.json'\npackage='api_fixture'\nexample='contract'\n");
+    std::fs::write(root.join("Cargo.toml"), toml).unwrap();
+    std::fs::create_dir_all(root.join("examples")).unwrap();
+    std::fs::write(
+        root.join("examples/contract.rs"),
+        "fn main() {\n    println!(\"{}\", include_str!(\"../current.json\"));\n}\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("src/lib.rs"), "\n").unwrap();
+    let base = r#"{"openapi":"3.1.0","info":{"title":"Notes","version":"1.0.0"},"paths":{"/notes":{"get":{"parameters":[],"responses":{"200":{"description":"OK"}}}}}}"#;
+    std::fs::write(root.join("released.json"), base).unwrap();
+    let optional=base.replace(r#""parameters":[]"#,r#""parameters":[{"name":"search","in":"query","required":false,"schema":{"type":"string"}}]"#);
+    std::fs::write(root.join("current.json"), &optional).unwrap();
+    let passing = hyve(&root, &["lint"]);
+    assert!(passing.status.success(), "{}", stderr(&passing));
+    std::fs::write(
+        root.join("current.json"),
+        optional.replace("\"required\":false", "\"required\":true"),
+    )
+    .unwrap();
+    for args in [
+        vec!["lint"],
+        vec!["lint", "--schema", "released.json", "current.json"],
+    ] {
+        let failing = hyve(&root, &args);
+        assert_eq!(failing.status.code(), Some(1));
+        let diagnostic = format!(
+            "{}{}",
+            String::from_utf8_lossy(&failing.stdout),
+            stderr(&failing)
+        );
+        assert!(
+            diagnostic.contains("search") && diagnostic.contains("/notes"),
+            "{diagnostic}"
+        );
+    }
 }
 
 /// A workspace whose member depends on `orbic` (and `serge`) at the given
@@ -335,20 +463,30 @@ fn codegen_and_build_call_the_framework_stages() {
     assert_eq!(log, "orbic codegen --check\n");
     let (o, log) = hyve_with_tools(&d, &bin, &["build", "--debug"]);
     assert!(o.status.success(), "{}", stderr(&o));
-    assert_eq!(log, "serge build --debug\n");
-    // `preview` is serge's stage, flags passed through; without a tool
-    // providing it there is nothing to preview.
-    let (o, log) = hyve_with_tools(&d, &bin, &["preview", "--web"]);
+    assert_eq!(log, "orbic codegen\nserge build --debug\n");
+    let (o, log) = hyve_with_tools(&d, &bin, &["build", "--debug", "-p", "ap*"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(log, "orbic codegen\nserge build --debug -p app\n");
+    // The selected framework receives the UI target flags. Without a tool
+    // providing the stage there is no local app or server to run.
+    let (o, log) = hyve_with_tools(&d, &bin, &["dev", "--web"]);
     assert_eq!(o.status.code(), Some(1), "{}", stderr(&o));
     assert!(
-        stderr(&o).contains("nothing to preview") && log.is_empty(),
+        stderr(&o).contains("no framework in this workspace provides a `dev` stage")
+            && log.is_empty(),
         "{}",
         stderr(&o)
     );
-    fake_tool(&bin, "serge", "0.2.0", &["build", "preview"], 0);
-    let (o, log) = hyve_with_tools(&d, &bin, &["preview", "--native"]);
+    fake_tool(&bin, "serge", "0.2.0", &["build", "dev"], 0);
+    let (o, log) = hyve_with_tools(&d, &bin, &["dev", "--native"]);
     assert!(o.status.success(), "{}", stderr(&o));
-    assert_eq!(log, "serge preview --native\n");
+    assert_eq!(log, "serge dev --native\n");
+    // The old server tool and the new UI tool would start only half the app.
+    fake_tool(&bin, "orbic", "0.1.0", &["codegen", "preview"], 0);
+    let (o, log) = hyve_with_tools(&d, &bin, &["dev", "--web"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(stderr(&o).contains("`hyve-orbic` still advertises the old `preview` stage"));
+    assert!(log.is_empty());
     // Tests need no stages.
     let (o, log) = hyve_with_tools(&d, &bin, &["test"]);
     assert!(o.status.success() && log.is_empty(), "{}", stderr(&o));
@@ -403,72 +541,69 @@ fn stage_failures_and_version_mismatches_fail() {
     );
 }
 
-/// A stand-in `hyve-<framework>` providing `preview`, whose `preview` runs
+/// A stand-in `hyve-<framework>` providing `dev`, whose `dev` runs
 /// the shell `body`.
 #[cfg(unix)]
-fn fake_preview_tool(bin: &Path, framework: &str, version: &str, body: &str) {
+fn fake_dev_tool(bin: &Path, framework: &str, version: &str, body: &str) {
     use std::os::unix::fs::PermissionsExt;
     let path = bin.join(format!("hyve-{framework}"));
     let script = format!(
-        "#!/bin/sh\nif [ \"$1\" = stages ]; then printf '%s\\n' {version} preview; exit 0; fi\n{body}\n"
+        "#!/bin/sh\nif [ \"$1\" = stages ]; then printf '%s\\n' {version} dev; exit 0; fi\n{body}\n"
     );
     std::fs::create_dir_all(bin).unwrap();
     std::fs::write(&path, script).unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-/// `preview` stages run at the same time with a stdin lifeline: a stage
+/// `dev` stages run at the same time with a stdin lifeline: a stage
 /// that ends (fails, or succeeds: its window closed) stops the others (they
 /// see their stdin close) and `hyve` ends with its code; a stage that
 /// ignores the lifeline is killed after a grace period.
 #[cfg(unix)]
 #[test]
-fn preview_stages_run_together_and_stop_together() {
+fn dev_stages_run_together_and_stop_together() {
     use std::time::{Duration, Instant};
     let d = framework_workspace("0.1.0", Some("0.2.0"));
     let bin = d.join("bin");
     // orbic serves until its stdin closes; serge fails after a moment.
-    fake_preview_tool(
+    fake_dev_tool(
         &bin,
         "orbic",
         "0.1.0",
         "[ \"$HYVE_STAGE_LIFELINE\" = stdin ] || exit 9\necho \"orbic up $*\" >> \"$HYVE_FAKE_LOG\"\ncat > /dev/null\necho 'orbic stopped' >> \"$HYVE_FAKE_LOG\"",
     );
-    fake_preview_tool(
+    fake_dev_tool(
         &bin,
         "serge",
         "0.2.0",
         "echo \"serge up $*\" >> \"$HYVE_FAKE_LOG\"\nsleep 1\nexit 4",
     );
     let t = Instant::now();
-    let (o, log) = hyve_with_tools(&d, &bin, &["preview", "--web"]);
+    let (o, log) = hyve_with_tools(&d, &bin, &["dev", "--web"]);
     assert_eq!(o.status.code(), Some(4), "{}", stderr(&o));
     assert!(t.elapsed() < Duration::from_secs(4), "{:?}", t.elapsed());
     assert!(
-        log.contains("orbic up preview --web") && log.contains("serge up preview --web"),
+        log.contains("orbic up dev --web") && log.contains("serge up dev --web"),
         "{log}"
     );
     assert!(log.ends_with("orbic stopped\n"), "orbic was stopped: {log}");
 
-    // A stage that ends well (its window closed) ends the preview too.
-    fake_preview_tool(
+    // A stage that ends well (its window closed) ends the development session too.
+    fake_dev_tool(
         &bin,
         "serge",
         "0.2.0",
         "sleep 0.5\necho 'window closed' >> \"$HYVE_FAKE_LOG\"",
     );
-    let (o, log) = hyve_with_tools(&d, &bin, &["preview", "--native"]);
+    let (o, log) = hyve_with_tools(&d, &bin, &["dev", "--native"]);
     assert!(o.status.success(), "{}", stderr(&o));
-    assert_eq!(
-        log,
-        "orbic up preview --native\nwindow closed\norbic stopped\n"
-    );
+    assert_eq!(log, "orbic up dev --native\nwindow closed\norbic stopped\n");
 
     // A stage that ignores its lifeline is killed.
-    fake_preview_tool(&bin, "orbic", "0.1.0", "exec sleep 60");
-    fake_preview_tool(&bin, "serge", "0.2.0", "sleep 0.3\nexit 5");
+    fake_dev_tool(&bin, "orbic", "0.1.0", "exec sleep 60");
+    fake_dev_tool(&bin, "serge", "0.2.0", "sleep 0.3\nexit 5");
     let t = Instant::now();
-    let (o, _) = hyve_with_tools(&d, &bin, &["preview"]);
+    let (o, _) = hyve_with_tools(&d, &bin, &["dev"]);
     assert_eq!(o.status.code(), Some(5), "{}", stderr(&o));
     assert!(
         stderr(&o).contains("did not stop when asked"),

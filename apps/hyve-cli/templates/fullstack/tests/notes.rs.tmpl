@@ -1,28 +1,59 @@
-//! The backend on an in-memory database: `cargo test --features server`.
+//! Run `hyve test` to exercise the notes backend on an in-memory SQLite database.
 #![cfg(feature = "server")]
 
-use orbic::{Db, TestClient};
+use orbic::{Cache, Db, TestClient};
 use {{crate}}::*;
 
-#[hyve::test]
-async fn notes_are_created_and_listed() {
-    let client = TestClient::new(backend(Db::in_memory().await));
+async fn fixture() -> (Db, TestClient) {
+    let db = Db::in_memory().await;
+    let client = TestClient::new(backend(db.clone(), Cache::in_memory()));
+    (db, client)
+}
 
+#[hyve::test]
+async fn creating_a_note_persists_its_id_and_body() {
+    let (db, client) = fixture().await;
     let created = client
         .post("/v1/notes")
         .json(&NewNote { body: "first".into() })
         .send()
         .await;
     assert!(created.status().is_success(), "{}", created.status());
+    let saved: Note = created.json();
+    assert_eq!(saved.body, "first");
+    assert_eq!(db.query::<Note>().fetch_all().await.unwrap(), [saved]);
+}
 
-    let empty = client
-        .post("/v1/notes")
-        .json(&NewNote { body: String::new() })
-        .send()
-        .await;
-    assert_eq!(empty.status(), 400);
+#[hyve::test]
+async fn invalid_notes_are_rejected_without_writing_a_row() {
+    let (db, client) = fixture().await;
+    for body in [String::new(), "x".repeat(201)] {
+        let response = client.post("/v1/notes").json(&NewNote { body }).send().await;
+        assert_eq!(response.status(), 400);
+        assert_eq!(response.error().code(), "invalid_request");
+    }
+    assert!(db.query::<Note>().fetch_all().await.unwrap().is_empty());
+}
 
-    let notes: Vec<Note> = client.get("/v1/notes").send().await.json();
-    assert_eq!(notes.len(), 1);
-    assert_eq!(notes[0].body, "first");
+#[hyve::test]
+async fn notes_are_created_and_listed() {
+    let (_, client) = fixture().await;
+    let initial = client.get("/v1/notes").send().await;
+    assert_eq!(initial.status(), 200);
+    assert!(initial.json::<Vec<Note>>().is_empty());
+    let mut expected = Vec::new();
+    for body in ["first", "second"] {
+        let created = client
+            .post("/v1/notes")
+            .json(&NewNote { body: body.into() })
+            .send()
+            .await;
+        assert!(created.status().is_success());
+        expected.push(created.json::<Note>());
+    }
+    let listed = client.get("/v1/notes").send().await;
+    assert_eq!(listed.status(), 200);
+    let rows = listed.json::<Vec<Note>>();
+    assert_eq!(rows.len(), expected.len());
+    assert!(expected.iter().all(|saved| rows.contains(saved)));
 }

@@ -30,10 +30,10 @@ async fn create_note(db: Ctx<Db>, input: Valid<NewNote>) -> OrbicResult<Note> {
     .await
 }
 
-/// The app: every route under `/v1`. The cache in memory remembers
+/// The app: every route under `/v1`. The provided cache remembers
 /// `Idempotency-Key` replies of `POST` routes.
-pub fn app(db: Db) -> OrbicApp {
-    OrbicApp::new().provide(db).provide(Cache::in_memory()).mount(
+pub fn app(db: Db, cache: Cache) -> OrbicApp {
+    OrbicApp::new().provide(db).provide(cache).mount(
         "/v1",
         component()
             .get("/notes", list_notes)
@@ -48,7 +48,7 @@ mod tests {
     #[hyve::test]
     async fn notes_are_created_and_listed() {
         // An in-memory database with the migrations in `migrations/`.
-        let client = TestClient::new(app(Db::in_memory().await));
+        let client = TestClient::new(app(Db::in_memory().await, Cache::in_memory()));
 
         let created = client
             .post("/v1/notes")

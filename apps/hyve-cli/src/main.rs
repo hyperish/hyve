@@ -1,16 +1,18 @@
 //! `hyve` — the Hyperish workflow on top of Cargo (`docs/01-dx-and-dsl.md` §2).
 //!
-//! Phase 1 runs `test` and `build` on the enclosing Cargo workspace, runs
+//! Runs `test`, `lint` and `build` on the enclosing Cargo workspace, runs
 //! the frameworks' stages (`hyve-orbic`, `hyve-serge`) for `codegen`,
-//! `build` and `preview`, and creates projects with `init`. `lint` belongs
-//! to a later phase: it reports that it is not implemented and exits with
-//! [`EXIT_NOT_IMPLEMENTED`]; nothing unimplemented ends in success.
+//! `build`, `lint` and `dev`, and creates projects with `init`.
 //!
 //! Exit codes: `0` success, [`EXIT_FAILED`] the work failed (or the exit code
 //! of the `cargo` command it ran), [`EXIT_USAGE`] unknown command, option or
-//! template, [`EXIT_NOT_IMPLEMENTED`] not in this release.
+//! template.
 
+mod android;
+mod ios;
+mod lint;
 mod templates;
+mod update;
 mod workspace;
 
 use std::ffi::OsString;
@@ -25,10 +27,8 @@ use workspace::Workspace;
 const EXIT_FAILED: u8 = 1;
 /// Unknown command, option or template name.
 const EXIT_USAGE: u8 = 2;
-/// The command or option is not implemented in this release.
-const EXIT_NOT_IMPLEMENTED: u8 = 3;
 
-const COMMANDS: [&str; 6] = ["init", "preview", "lint", "test", "build", "codegen"];
+const COMMANDS: [&str; 7] = ["init", "dev", "lint", "test", "build", "codegen", "update"];
 
 const USAGE: &str = "\
 hyve — the Hyperish workflow on top of Cargo
@@ -37,26 +37,28 @@ Usage: hyve <command> [options]
 
 Commands:
   test [-p <package>]... [--release] [-- <test args>...]
-                      run the workspace's tests (cargo test)
-  build [-p <package>]... [--debug]
+                      run the workspace's tests with declared server features
+  build [-p <package>]... [--debug] [--format <app,dmg,wix,nsis,deb,appimage,apk,aab,ios-sim,ipa>]
                       build the workspace, optimized unless --debug (cargo build)
+  update keygen|create|apply  sign or apply desktop artifact deltas (hyve update --help)
   codegen [--check]   run the frameworks' code generation stages
   init [--template fullstack|serge-app|orbic-service] [--force] [<path>]
                       create a project from a template (default fullstack)
-  preview [--web] [--native]
-                      run the frameworks' previews together; Ctrl-C stops all
-  lint                lint the workspace (Phase 2)
+  dev [--web] [--native]
+                      start the local development environment (Ctrl-C stops all)
+  lint                check formatting, Clippy, framework stages and configured API compatibility
+  lint --schema <baseline> <current>  compare two local OpenAPI documents
+  lint --expand [cargo expand options]  print expanded Rust for the current package
 
 Options:
   -h, --help          print this help
   -V, --version       print the version
 
-Exit codes: 0 success, 1 failure, 2 usage error, 3 not implemented in this release.";
+Exit codes: 0 success, 1 failure, 2 usage error. Cargo failures retain their exit code.";
 
 /// Why a command did not succeed.
 enum Fail {
     Usage(String, Option<String>),
-    NotImplemented(String),
     Failed(String, Option<String>),
     /// A `cargo` run failed; it already printed why.
     Child(Option<i32>),
@@ -69,11 +71,6 @@ impl Fail {
                 EXIT_USAGE,
                 m,
                 h.or_else(|| Some("run `hyve --help` for usage".into())),
-            ),
-            Fail::NotImplemented(m) => (
-                EXIT_NOT_IMPLEMENTED,
-                format!("{m} is not implemented in this release"),
-                None,
             ),
             Fail::Failed(m, h) => (EXIT_FAILED, m, h),
             Fail::Child(code) => {
@@ -123,13 +120,15 @@ fn run(args: &[String]) -> Result<(), Fail> {
         }
         "test" => test(rest),
         "build" => build(rest),
+        "update" => update::run(rest),
         "codegen" => codegen(rest),
         "init" => init(rest),
-        "preview" => preview(rest),
-        "lint" => {
-            no_options("lint", rest)?;
-            Err(Fail::NotImplemented("`hyve lint` (Phase 2)".into()))
-        }
+        "dev" => dev(rest),
+        "preview" => Err(Fail::Usage(
+            "`hyve preview` was renamed to `hyve dev`".into(),
+            Some("use `hyve dev` with the same target options".into()),
+        )),
+        "lint" => lint::run(rest),
         other => {
             let help = suggest(other, COMMANDS).map(|c| format!("did you mean `hyve {c}`?"));
             Err(Fail::Usage(format!("unknown command `{other}`"), help))
@@ -141,6 +140,7 @@ fn run(args: &[String]) -> Result<(), Fail> {
 #[derive(Default)]
 struct CargoOptions {
     packages: Vec<String>,
+    formats: Vec<String>,
     release: bool,
     debug: bool,
     passthrough: Vec<String>,
@@ -160,6 +160,25 @@ fn cargo_options(command: &str, args: &[String], accepts: &[&str]) -> Result<Car
             },
             "--release" if accepts.contains(&"--release") => o.release = true,
             "--debug" if accepts.contains(&"--debug") => o.debug = true,
+            "--format" if accepts.contains(&"--format") => {
+                let formats = it
+                    .next()
+                    .ok_or_else(|| Fail::Usage("`--format` needs a package format".into(), None))?;
+                for format in formats.split(',') {
+                    if ![
+                        "app", "dmg", "wix", "nsis", "deb", "appimage", "apk", "aab", "ios-sim",
+                        "ipa",
+                    ]
+                    .contains(&format)
+                    {
+                        return Err(Fail::Usage(
+                            format!("unknown package format `{format}`"),
+                            None,
+                        ));
+                    }
+                    o.formats.push(format.to_owned());
+                }
+            }
             other => return Err(unknown_option(command, other, accepts)),
         }
     }
@@ -189,18 +208,14 @@ fn unknown_option(command: &str, option: &str, known: &[&str]) -> Fail {
     }
 }
 
-fn no_options(command: &str, args: &[String]) -> Result<(), Fail> {
-    match args.first() {
-        Some(a) => Err(unknown_option(command, a, &[])),
-        None => Ok(()),
-    }
-}
-
 fn test(args: &[String]) -> Result<(), Fail> {
     let o = cargo_options("test", args, &["--release", "--"])?;
     let ws = Workspace::find()?;
     let mut cmd = ws.cargo("test");
     select(&mut cmd, &o.packages);
+    for feature in ws.test_features(&o.packages)? {
+        cmd.arg("--features").arg(feature);
+    }
     if o.release {
         cmd.arg("--release");
     }
@@ -211,15 +226,103 @@ fn test(args: &[String]) -> Result<(), Fail> {
 }
 
 fn build(args: &[String]) -> Result<(), Fail> {
-    let o = cargo_options("build", args, &["--debug"])?;
+    let mut o = cargo_options("build", args, &["--debug", "--format"])?;
+    let aab = o.formats.iter().any(|format| format == "aab");
+    let want_apk = o.formats.iter().any(|format| format == "apk");
+    let android = aab || want_apk;
+    let sim = o.formats.iter().any(|f| f == "ios-sim");
+    let ipa = o.formats.iter().any(|f| f == "ipa");
+    if (sim || ipa) && !cfg!(target_os = "macos") {
+        return Err(Fail::Failed(
+            "iOS packaging requires Xcode on macOS".into(),
+            None,
+        ));
+    }
+    o.formats
+        .retain(|f| !matches!(f.as_str(), "apk" | "aab" | "ios-sim" | "ipa"));
+    for format in &o.formats {
+        let host = match format.as_str() {
+            "app" | "dmg" => "macos",
+            "wix" | "nsis" => "windows",
+            "deb" | "appimage" => "linux",
+            _ => unreachable!("validated format"),
+        };
+        if std::env::consts::OS != host {
+            return Err(Fail::Failed(
+                format!("the `{format}` package needs a {host} executable"),
+                Some(format!("run this build on {host}")),
+            ));
+        }
+    }
     let ws = Workspace::find()?;
-    ws.run_stages("build", if o.debug { &["--debug"] } else { &[] })?;
+    let roots = ws.selected_roots(&o.packages)?;
+    ws.run_stages("codegen", &[])?;
+    if android {
+        for app in ws.mobile_packages("android", roots.as_deref())? {
+            let library = ws
+                .widget_sources(app)?
+                .map(|p| p.join("android"))
+                .filter(|p| p.is_dir());
+            if android::compose(&ws, app, library.as_deref(), o.debug, want_apk, aab)? {
+                continue;
+            }
+            let mut apk = ws.cargo("apk");
+            apk.args(["build", "--lib", "-p", &app.name]);
+            if !o.debug {
+                apk.arg("--release");
+            }
+            run_cargo(apk)?;
+            if aab {
+                android::bundle(&ws, app, o.debug)?;
+            }
+        }
+    }
+    if sim || ipa {
+        for app in ws.mobile_packages("ios", roots.as_deref())? {
+            ios::build(&ws, app, sim, ipa, o.debug)?;
+        }
+    }
+    if (android || sim || ipa) && o.formats.is_empty() {
+        return Ok(());
+    }
+    let options = if o.debug { vec!["--debug"] } else { Vec::new() };
+    if let Some(roots) = &roots {
+        for name in roots
+            .lines()
+            .filter_map(|line| line.split_whitespace().next())
+        {
+            let mut args = options.clone();
+            args.extend(["-p", name]);
+            ws.run_stages("build", &args)?;
+        }
+    } else {
+        ws.run_stages("build", &options)?;
+    }
     let mut cmd = ws.cargo("build");
     select(&mut cmd, &o.packages);
     if !o.debug {
         cmd.arg("--release");
     }
-    run_cargo(cmd)
+    run_cargo(cmd)?;
+    if !o.formats.is_empty() {
+        let mut packager = ws.cargo("packager");
+        let tool = ws.cargo("packager").arg("--version").output();
+        if !tool.is_ok_and(|out| out.status.success()) {
+            return Err(Fail::Failed(
+                "desktop packaging requires `cargo-packager`".into(),
+                Some("cargo install cargo-packager --version 0.11.8 --locked".into()),
+            ));
+        }
+        packager.arg("--formats").arg(o.formats.join(","));
+        if !o.debug {
+            packager.arg("--release");
+        }
+        if !o.packages.is_empty() {
+            packager.arg("--packages").arg(o.packages.join(","));
+        }
+        run_cargo(packager)?;
+    }
+    Ok(())
 }
 
 fn codegen(args: &[String]) -> Result<(), Fail> {
@@ -324,31 +427,32 @@ fn init(args: &[String]) -> Result<(), Fail> {
     let into = path.map(|p| format!("cd {p} && ")).unwrap_or_default();
     match template {
         "orbic-service" => {
-            println!("next: {into}hyve preview   (the server, with a local database)")
+            println!("next: {into}hyve dev   (the server, with a local database)")
         }
         "serge-app" => {
-            println!("next: {into}hyve preview --web   (or --native for the desktop window)")
+            println!("next: {into}hyve dev --web   (or --native for the desktop window)")
         }
         _ => println!(
-            "next: {into}hyve preview --web   (the page and its backend; without --web, the desktop window too)"
+            "next: {into}hyve dev --web   (the page and its backend; without --web, the desktop window too)"
         ),
     }
     Ok(())
 }
 
-fn preview(args: &[String]) -> Result<(), Fail> {
+fn dev(args: &[String]) -> Result<(), Fail> {
     for a in args {
         if a != "--web" && a != "--native" {
-            return Err(unknown_option("preview", a, &["--web", "--native"]));
+            return Err(unknown_option("dev", a, &["--web", "--native"]));
         }
     }
     let ws = Workspace::find()?;
     let flags: Vec<&str> = args.iter().map(String::as_str).collect();
-    match ws.run_stage_together("preview", &flags)? {
+    match ws.run_stage_together("dev", &flags)? {
         0 => Err(Fail::Failed(
-            "nothing to preview: no framework of this workspace provides a `preview` stage".into(),
+            "no framework in this workspace provides a `dev` stage".into(),
             Some(
-                "`hyve preview` runs `hyve-serge preview` and `hyve-orbic preview`; add a serge app, or declare an orbic server (`[package.metadata.orbic.server]`)".into(),
+                "add a serge app or declare an orbic server in `[package.metadata.orbic.server]`"
+                    .into(),
             ),
         )),
         _ => Ok(()),

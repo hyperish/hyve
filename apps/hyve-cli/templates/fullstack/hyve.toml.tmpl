@@ -1,10 +1,10 @@
 [serge]
-# `hyve preview --web` serves the page and forwards `/v1` here (the backend).
+# `hyve dev --web` serves the page and forwards `/v1` here (the backend).
 api_proxy = "http://127.0.0.1:3000/v1"
 
 [orbic]
 # The database engine `sql!` queries are checked against.
 dialect = "sqlite"
-# Where the backend keeps its data. `hyve preview` gives it a local database
+# Where the backend keeps its data. `hyve dev` gives it a local database
 # instead (HYPERISH_ORBIC_DATABASE_URL wins over this line).
 database_url = "sqlite:{{name}}.sqlite?mode=rwc"

@@ -34,11 +34,11 @@ pub async fn create_note(#[server_ctx] db: Ctx<Db>, input: Valid<NewNote>) -> Hy
     .await
 }
 
-/// The backend: the `#[server]` functions under `/v1`. The cache in memory
+/// The backend: the `#[server]` functions under `/v1`. The provided cache
 /// remembers `Idempotency-Key` replies of `POST` calls.
 #[cfg(feature = "server")]
-pub fn backend(db: Db) -> OrbicApp {
-    OrbicApp::new().provide(db).provide(Cache::in_memory()).mount(
+pub fn backend(db: Db, cache: Cache) -> OrbicApp {
+    OrbicApp::new().provide(db).provide(cache).mount(
         "/v1",
         component().handle(list_notes).handle(create_note),
     )

@@ -1,0 +1,76 @@
+#!/bin/sh
+# Xcode invokes this phase for both simulator builds and signed device archives.
+set -eu
+cargo=${CARGO:-cargo}
+if ! command -v "$cargo" >/dev/null 2>&1 && [ -x "$HOME/.cargo/bin/cargo" ]; then
+    cargo="$HOME/.cargo/bin/cargo"
+fi
+export CARGO_TARGET_DIR="$PROJECT_TEMP_DIR/cargo"
+cd "$SRCROOT/.."
+profile=debug
+cargo_profile=dev
+if [ "$CONFIGURATION" = Release ]; then profile=release; cargo_profile=release; fi
+# Cargo tracks linker arguments, so use a new input path when Xcode changes the bytes.
+link_input() {
+    digest=$(/usr/bin/shasum -a 256 < "$1" | cut -d' ' -f1)
+    directory="$PROJECT_TEMP_DIR/HyveLinkInputs"
+    mkdir -p "$directory"
+    path="$directory/$digest.$2"
+    if [ ! -f "$path" ]; then cp "$1" "$path"; fi
+    printf '%s\n' "$path"
+}
+build_binary() {
+    # A Rust executable is linked outside Xcode. CoreSimulator reads capabilities
+    # from these Mach-O sections even when codesign reports a valid ad hoc signature.
+    if [ "$PLATFORM_NAME" = iphonesimulator ] && [ -n "${LD_ENTITLEMENTS_SECTION:-}" ]; then
+        xml=$(link_input "$LD_ENTITLEMENTS_SECTION" xcent)
+        set -- "$@" -C link-arg=-Wl,-sectcreate,__TEXT,__entitlements -C link-arg=-Xlinker -C "link-arg=$xml"
+        if [ -n "${LD_ENTITLEMENTS_SECTION_DER:-}" ]; then
+            der=$(link_input "$LD_ENTITLEMENTS_SECTION_DER" der)
+            set -- "$@" -C link-arg=-Wl,-sectcreate,__TEXT,__ents_der -C link-arg=-Xlinker -C "link-arg=$der"
+        fi
+    fi
+    if [ "$#" -eq 0 ]; then
+        "$cargo" build --profile "$cargo_profile" -p '{{name}}' --bin '{{name}}' --target "$triple"
+    else
+        "$cargo" rustc --profile "$cargo_profile" -p '{{name}}' --bin '{{name}}' --target "$triple" -- "$@"
+    fi
+}
+# Build every requested simulator architecture before producing a universal binary.
+set --
+for arch in $ARCHS; do
+    case "$PLATFORM_NAME/$arch" in
+        iphoneos/arm64) triple=aarch64-apple-ios ;;
+        iphonesimulator/arm64) triple=aarch64-apple-ios-sim ;;
+        iphonesimulator/x86_64) triple=x86_64-apple-ios ;;
+        *) echo "Unsupported iOS architecture $PLATFORM_NAME/$arch" >&2; exit 1 ;;
+    esac
+    if [ -n "${HYVE_WIDGET_BRIDGE:-}" ]; then
+        swift_target="$arch-apple-ios$IPHONEOS_DEPLOYMENT_TARGET"
+        if [ "$PLATFORM_NAME" = iphonesimulator ]; then swift_target="$swift_target-simulator"; fi
+        object="$PROJECT_TEMP_DIR/SergeWidgetHost-$arch.o"
+        /usr/bin/xcrun swiftc -parse-as-library -whole-module-optimization -emit-object -O \
+            -module-name SergeWidgetHost -target "$swift_target" -sdk "$SDKROOT" "$HYVE_WIDGET_BRIDGE" -o "$object"
+        swiftc=$(/usr/bin/xcrun -f swiftc)
+        # Keep the normal Rust compile profile and pass native link flags only to the host binary.
+        build_binary -C "link-arg=$(link_input "$object" o)" -C link-arg=-Wl,-export_dynamic -C link-arg=-Wl,-u,_serge_widget_publish_v1 \
+            -C "link-arg=-L$(dirname "$swiftc")/../lib/swift/$PLATFORM_NAME" -C "link-arg=-L$SDKROOT/usr/lib/swift" \
+            -C link-arg=-Wl,-rpath,/usr/lib/swift
+    else
+        build_binary
+    fi
+    set -- "$@" "$CARGO_TARGET_DIR/$triple/$profile/{{name}}"
+done
+out="$TARGET_BUILD_DIR/$EXECUTABLE_PATH"
+mkdir -p "$(dirname "$out")"
+if [ "$#" -eq 1 ]; then install -m 755 "$1" "$out"
+else /usr/bin/xcrun lipo -create "$@" -output "$out"; chmod 755 "$out"; fi
+
+# Xcode signs the containing app after this build phase.
+widgets="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/PlugIns/SergeWidgets.appex"
+if [ -n "${HYVE_WIDGET_EXTENSION:-}" ]; then
+    mkdir -p "$(dirname "$widgets")"
+    /usr/bin/ditto "$HYVE_WIDGET_EXTENSION" "$widgets"
+elif [ -d "$widgets" ]; then
+    rm -rf "$widgets"
+fi

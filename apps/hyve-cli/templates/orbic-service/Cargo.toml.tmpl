@@ -7,6 +7,7 @@ publish = false
 # `#[table]` and `#[server]` keep their server-side code only with the
 # `server` feature; a backend-only package always builds it.
 [features]
+cache-redis = ["server"]
 default = ["server"]
 server = []
 
@@ -18,6 +19,7 @@ tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal
 [dev-dependencies]
 hyve = { version = "={{hyve}}", features = ["test"] }
 
-# `hyve preview` builds and runs this server, gives it a local database, and
+# `hyve dev` builds and runs this server, gives it a local database, and
 # restarts it when a source changes.
 [package.metadata.orbic.server]
+cache_features = ["cache-redis", "orbic/cache-redis"]

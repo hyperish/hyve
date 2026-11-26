@@ -15,9 +15,11 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
+hyve-update.workspace = true
 hyve-core.workspace = true
 hyve-diagnostics.workspace = true
 hyve-serde.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
