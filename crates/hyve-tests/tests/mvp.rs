@@ -1,7 +1,6 @@
 //! The documentation examples, compiled and run (`docs/05-implementation-plan.md`
 //! §3): the README's `SceneConfig` and the `docs/01-dx-and-dsl.md` §1 sketch.
-//! The sketch's two `asset!` lines are Phase 2 and left out; `config::load`
-//! reads this crate's `hyve.toml`. Keep the code below in sync with the docs.
+//! `config::load` and `asset!` use files from the fixture package.
 
 #![allow(missing_docs)]
 
@@ -53,9 +52,16 @@ mod sketch {
         // 2) 설정 로드 시점에 즉시 Validation 수행
         let cfg = config::load::<EngineConfig>()?;
         let fps = signal(cfg.max_fps);
+        let default_shader = asset!("/shaders/pbr.wgsl");
 
         fps.set(120);
         assert_eq!(fps.get(), 120);
+        assert!(default_shader.exists());
+        assert_eq!(default_shader.path(), "/shaders/pbr.wgsl");
+        assert_eq!(
+            default_shader.bytes(),
+            include_bytes!("../shaders/pbr.wgsl")
+        );
         assert_eq!((cfg.app_name.as_str(), cfg.max_fps), ("hyve-tests", 144));
         Ok(())
     }

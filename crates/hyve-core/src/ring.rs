@@ -29,16 +29,29 @@ pub struct SharedRingBuf<T: Pod> {
 struct Ring {
     /// Number of positions claimed so far (the next position to write).
     head: AtomicU64,
-    words_per_slot: usize,
-    slots: Box<[Slot]>,
+    capacity: usize,
+    stride: usize,
+    slots: Box<[AtomicU64]>,
 }
 
-struct Slot {
+struct Slot<'a> {
     /// Even: stable; odd: being written. Incremented twice per write.
-    seq: AtomicU64,
+    seq: &'a AtomicU64,
     /// Ring position (+1) currently stored; 0 = never written.
-    pos: AtomicU64,
-    words: Box<[AtomicU64]>,
+    pos: &'a AtomicU64,
+    words: &'a [AtomicU64],
+}
+
+impl Ring {
+    fn slot(&self, position: u64) -> Slot<'_> {
+        let start = (position % self.capacity as u64) as usize * self.stride;
+        let fields = &self.slots[start..start + self.stride];
+        Slot {
+            seq: &fields[0],
+            pos: &fields[1],
+            words: &fields[2..],
+        }
+    }
 }
 
 const MAX_READ_ATTEMPTS: usize = 4;
@@ -48,21 +61,17 @@ impl<T: Pod> SharedRingBuf<T> {
     ///
     /// # Panics
     ///
-    /// Panics if `capacity` is zero.
+    /// Panics if `capacity` is zero or the ring size overflows.
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "SharedRingBuf capacity must be non-zero");
-        let words_per_slot = std::mem::size_of::<T>().div_ceil(8).max(1);
-        let slots = (0..capacity)
-            .map(|_| Slot {
-                seq: AtomicU64::new(0),
-                pos: AtomicU64::new(0),
-                words: (0..words_per_slot).map(|_| AtomicU64::new(0)).collect(),
-            })
-            .collect();
+        let stride = 2 + std::mem::size_of::<T>().div_ceil(8);
+        let length = capacity.checked_mul(stride).expect("ring size overflow");
+        let slots = (0..length).map(|_| AtomicU64::new(0)).collect();
         SharedRingBuf {
             ring: Arc::new(Ring {
                 head: AtomicU64::new(0),
-                words_per_slot,
+                capacity,
+                stride,
                 slots,
             }),
             _marker: PhantomData,
@@ -71,7 +80,7 @@ impl<T: Pod> SharedRingBuf<T> {
 
     /// Number of samples the ring retains.
     pub fn capacity(&self) -> usize {
-        self.ring.slots.len()
+        self.ring.capacity
     }
 
     /// Total number of samples pushed so far.
@@ -85,7 +94,7 @@ impl<T: Pod> SharedRingBuf<T> {
     pub fn push(&self, value: T) {
         let ring = &*self.ring;
         let pos = ring.head.fetch_add(1, Ordering::AcqRel);
-        let slot = &ring.slots[(pos % ring.slots.len() as u64) as usize];
+        let slot = ring.slot(pos);
 
         // Acquire the slot's write lock (odd sequence).
         let mut seq = slot.seq.load(Ordering::Relaxed);
@@ -107,15 +116,21 @@ impl<T: Pod> SharedRingBuf<T> {
         // (writers overtook each other); never replace newer data with older.
         if slot.pos.load(Ordering::Relaxed) <= pos + 1 {
             fence(Ordering::Release);
-            let bytes = bytemuck::bytes_of(&value);
-            for (i, word) in slot.words.iter().enumerate() {
-                let mut chunk = [0u8; 8];
-                let start = i * 8;
-                let end = (start + 8).min(bytes.len());
-                if start < end {
-                    chunk[..end - start].copy_from_slice(&bytes[start..end]);
-                }
-                word.store(u64::from_ne_bytes(chunk), Ordering::Relaxed);
+            let mut chunks = crate::pod_bytes::bytes_of(&value).chunks_exact(8);
+            for (chunk, word) in chunks.by_ref().zip(slot.words) {
+                word.store(
+                    u64::from_ne_bytes(chunk.try_into().unwrap()),
+                    Ordering::Relaxed,
+                );
+            }
+            let tail = chunks.remainder();
+            if !tail.is_empty() {
+                let mut word = [0; 8];
+                word[..tail.len()].copy_from_slice(tail);
+                slot.words
+                    .last()
+                    .unwrap()
+                    .store(u64::from_ne_bytes(word), Ordering::Relaxed);
             }
             slot.pos.store(pos + 1, Ordering::Relaxed);
         }
@@ -128,7 +143,7 @@ impl<T: Pod> SharedRingBuf<T> {
     /// returned sample is intact and the returned run is contiguous in time.
     pub fn read_latest_snapshot(&self, out: &mut [T]) -> usize {
         let ring = &*self.ring;
-        let cap = ring.slots.len() as u64;
+        let cap = ring.capacity as u64;
         let want = (out.len() as u64).min(cap);
         if want == 0 {
             return 0;
@@ -158,7 +173,7 @@ impl<T: Pod> SharedRingBuf<T> {
 
     fn read_slot(&self, pos: u64, dst: &mut T) -> SlotRead {
         let ring = &*self.ring;
-        let slot = &ring.slots[(pos % ring.slots.len() as u64) as usize];
+        let slot = ring.slot(pos);
         let s1 = slot.seq.load(Ordering::Acquire);
         if s1 & 1 == 1 {
             return SlotRead::NotYetWritten;
@@ -171,14 +186,19 @@ impl<T: Pod> SharedRingBuf<T> {
                 SlotRead::Overwritten
             };
         }
-        let bytes = bytemuck::bytes_of_mut(dst);
-        for (i, word) in slot.words.iter().enumerate().take(ring.words_per_slot) {
-            let chunk = word.load(Ordering::Relaxed).to_ne_bytes();
-            let start = i * 8;
-            let end = (start + 8).min(bytes.len());
-            if start < end {
-                bytes[start..end].copy_from_slice(&chunk[..end - start]);
-            }
+        let mut chunks = crate::pod_bytes::bytes_of_mut(dst).chunks_exact_mut(8);
+        for (chunk, word) in chunks.by_ref().zip(slot.words) {
+            chunk.copy_from_slice(&word.load(Ordering::Relaxed).to_ne_bytes());
+        }
+        let tail = chunks.into_remainder();
+        if !tail.is_empty() {
+            let word = slot
+                .words
+                .last()
+                .unwrap()
+                .load(Ordering::Relaxed)
+                .to_ne_bytes();
+            tail.copy_from_slice(&word[..tail.len()]);
         }
         fence(Ordering::Acquire);
         let s2 = slot.seq.load(Ordering::Relaxed);
@@ -218,6 +238,25 @@ impl<T: Pod> fmt::Debug for SharedRingBuf<T> {
 mod tests {
     use super::*;
     use bytemuck::{Pod, Zeroable};
+
+    #[test]
+    fn partial_words_and_empty_samples_survive_wrap() {
+        fn check<T: Pod + PartialEq + std::fmt::Debug>(first: T, second: T) {
+            let ring = SharedRingBuf::new(2);
+            ring.push(first);
+            ring.push(second);
+            ring.push(first);
+            let mut out = [T::zeroed(); 2];
+            assert_eq!(ring.read_latest_snapshot(&mut out), 2);
+            assert_eq!(out, [second, first]);
+        }
+        check((), ());
+        check([1; 1], [2u8; 1]);
+        check([1; 7], [2u8; 7]);
+        check([1; 8], [2u8; 8]);
+        check([1; 9], [2u8; 9]);
+        check([1; 17], [2u8; 17]);
+    }
 
     #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
     #[repr(C)]

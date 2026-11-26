@@ -10,10 +10,8 @@
 
 use std::borrow::Cow;
 
+use crate::winnow::take_ascii1;
 use hyve_diagnostics::{Diagnostic, Span};
-use winnow::combinator::opt;
-use winnow::prelude::*;
-use winnow::token::{one_of, take_while};
 
 /// One assignment.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,13 +26,15 @@ pub struct DotenvEntry<'a> {
     pub key_span: Span,
 }
 
-fn key<'a>(input: &mut &'a str) -> winnow::Result<&'a str> {
-    (
-        one_of(|c: char| c.is_ascii_alphabetic() || c == '_'),
-        take_while(0.., |c: char| c.is_ascii_alphanumeric() || c == '_'),
-    )
-        .take()
-        .parse_next(input)
+fn key<'a>(input: &mut &'a str) -> Option<&'a str> {
+    if !input
+        .as_bytes()
+        .first()
+        .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
+    {
+        return None;
+    }
+    take_ascii1(input, |b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 /// Parses a `.env` file.
@@ -51,10 +51,14 @@ pub fn parse_dotenv(text: &str) -> Result<Vec<DotenvEntry<'_>>, Diagnostic> {
             continue;
         }
         let mut rest = body;
-        let _: winnow::Result<_> =
-            opt(("export", take_while(1.., [' ', '\t']))).parse_next(&mut rest);
+        if let Some(suffix) = rest
+            .strip_prefix("export")
+            .filter(|s| s.starts_with([' ', '\t']))
+        {
+            rest = suffix.trim_start_matches([' ', '\t']);
+        }
         let key_at = base + lead + (body.len() - rest.len());
-        let k = key.parse_next(&mut rest).map_err(|_| {
+        let k = key(&mut rest).ok_or_else(|| {
             Diagnostic::error("invalid variable name in .env")
                 .with_label(
                     Span::new(key_at, key_at + rest.len().min(1)),

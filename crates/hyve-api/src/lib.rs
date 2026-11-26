@@ -29,6 +29,7 @@ mod extract;
 pub mod http;
 mod page;
 pub mod params;
+pub mod realtime;
 mod transport;
 
 pub use call::{ContextNeed, ServerCall, ServerFn, ServerHandler, StubFn, Wire};

@@ -10,6 +10,10 @@ license = "MIT"
 publish = false
 
 [dependencies]
+hyve-parser-baseline = { package = "hyve-parser", version = "=0.1.0-alpha.1" }
+hyve-diagnostics-baseline = { package = "hyve-diagnostics", version = "=0.1.0-alpha.1" }
+hyve-core-baseline = { package = "hyve-core", version = "=0.1.0-alpha.1" }
+hyve-diagnostics = { path = "../../crates/hyve-diagnostics" }
 hyve = { path = "../../crates/hyve" }
 hyve-core = { path = "../../crates/hyve-core" }
 hyve-state = { path = "../../crates/hyve-state" }

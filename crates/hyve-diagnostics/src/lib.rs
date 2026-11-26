@@ -11,6 +11,10 @@
 use std::fmt;
 use std::ops::Range;
 
+mod ariadne_source;
+pub mod boundary;
+pub use ariadne_source::DiagnosticSource;
+
 /// A byte range into some source text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Span {
@@ -190,19 +194,20 @@ impl Diagnostic {
     /// Renders the diagnostic with excerpts of `source` (no colours), e.g. for a
     /// configuration file error printed at start-up.
     pub fn render(&self, source_name: &str, source: &str) -> String {
-        self.render_with(source_name, source, false)
+        DiagnosticSource::new(source_name, source).render(self)
     }
 
     /// Like [`render`](Self::render) with ANSI colours.
     pub fn render_colored(&self, source_name: &str, source: &str) -> String {
-        self.render_with(source_name, source, true)
+        self.render_with(&DiagnosticSource::new(source_name, source), true)
     }
 
-    fn render_with(&self, source_name: &str, source: &str, color: bool) -> String {
-        use ariadne::{Config, IndexType, Label as ALabel, Report, ReportKind, Source};
+    fn render_with(&self, source: &DiagnosticSource<'_>, color: bool) -> String {
+        use ariadne::{Config, IndexType, Label as ALabel, Report, ReportKind};
 
+        let source_name = source.name.as_ref();
         let clamp = |s: Span| {
-            let end = s.end.min(source.len());
+            let end = s.end.min(source.index.text().len());
             s.start.min(end)..end
         };
         let kind = match self.severity {
@@ -227,11 +232,7 @@ impl Diagnostic {
             report = report.with_note(n);
         }
         let mut buf = Vec::new();
-        if report
-            .finish()
-            .write((source_name, Source::from(source)), &mut buf)
-            .is_err()
-        {
+        if report.finish().write(source, &mut buf).is_err() {
             return self.summary();
         }
         String::from_utf8_lossy(&buf).into_owned()

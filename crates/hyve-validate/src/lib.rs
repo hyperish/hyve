@@ -2,7 +2,8 @@
 //! (`docs/02-architecture.md` §2.3).
 //!
 //! - [`Validate`]: `#[model]` implements it from `#[validate(...)]` field rules
-//!   (Phase 1 rules: `len = <range>` and `range = <range>`, see [`rules`]).
+//!   and an optional whole-model predicate. See [`rules`] for length,
+//!   range, regular expression, and predicate checks.
 //!   Every field is also validated recursively, so nested models are checked.
 //! - [`Valid<T>`]: proof that a value passed validation. Handlers that take
 //!   `Valid<T>` never see invalid input; servers always re-validate at the

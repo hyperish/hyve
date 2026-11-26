@@ -335,6 +335,7 @@ pub(crate) fn expand(args: ServerArgs, f: ItemFn) -> syn::Result<TokenStream> {
                 item,
                 krate,
                 Some(format!("{}Request", pascal_case(&name_str))),
+                None,
             )?;
             let idents: Vec<&Ident> = many.iter().map(|a| &a.ident).collect();
             (

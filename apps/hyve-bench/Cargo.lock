@@ -3,6 +3,15 @@
 version = 4
 
 [[package]]
+name = "aho-corasick"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "any_spawner"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -275,12 +284,13 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-api",
  "hyve-config",
- "hyve-core",
- "hyve-diagnostics",
+ "hyve-core 0.1.0-alpha.1",
+ "hyve-diagnostics 0.1.0-alpha.1",
  "hyve-macros",
- "hyve-parser",
+ "hyve-parser 0.1.0-alpha.1",
  "hyve-serde",
  "hyve-state",
+ "hyve-trace",
  "hyve-validate",
 ]
 
@@ -288,7 +298,7 @@ dependencies = [
 name = "hyve-api"
 version = "0.1.0-alpha.1"
 dependencies = [
- "hyve-core",
+ "hyve-core 0.1.0-alpha.1",
  "hyve-serde",
  "hyve-validate",
 ]
@@ -300,7 +310,11 @@ dependencies = [
  "bytemuck",
  "crossbeam-queue",
  "hyve",
- "hyve-core",
+ "hyve-core 0.1.0-alpha.1",
+ "hyve-core 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyve-diagnostics 0.1.0-alpha.1",
+ "hyve-diagnostics 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyve-parser 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyve-serde",
  "hyve-state",
  "reactive_graph",
@@ -315,9 +329,9 @@ dependencies = [
 name = "hyve-config"
 version = "0.1.0-alpha.1"
 dependencies = [
- "hyve-core",
- "hyve-diagnostics",
- "hyve-parser",
+ "hyve-core 0.1.0-alpha.1",
+ "hyve-diagnostics 0.1.0-alpha.1",
+ "hyve-parser 0.1.0-alpha.1",
  "hyve-serde",
  "hyve-validate",
 ]
@@ -333,8 +347,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyve-core"
+version = "0.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41c166b834d5bb38d18bd205e2109c560e0cd18deb2b9d18956c5aabc05d631d"
+dependencies = [
+ "bytemuck",
+ "getrandom",
+ "js-sys",
+ "rkyv",
+]
+
+[[package]]
 name = "hyve-diagnostics"
 version = "0.1.0-alpha.1"
+dependencies = [
+ "ariadne",
+]
+
+[[package]]
+name = "hyve-diagnostics"
+version = "0.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "602c7c23349750a3ad224ed2c001871bf8b089517756880d843f3a6018ac115d"
 dependencies = [
  "ariadne",
 ]
@@ -343,9 +378,10 @@ dependencies = [
 name = "hyve-macros"
 version = "0.1.0-alpha.1"
 dependencies = [
- "hyve-diagnostics",
+ "hyve-diagnostics 0.1.0-alpha.1",
  "proc-macro2",
  "quote",
+ "regex",
  "syn 2.0.119",
 ]
 
@@ -353,7 +389,16 @@ dependencies = [
 name = "hyve-parser"
 version = "0.1.0-alpha.1"
 dependencies = [
- "hyve-diagnostics",
+ "hyve-diagnostics 0.1.0-alpha.1",
+]
+
+[[package]]
+name = "hyve-parser"
+version = "0.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f53173d6eca90d5f4d3dff30970d0dbaad547cf69a9418c4c6aa16923f3e0ccd"
+dependencies = [
+ "hyve-diagnostics 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "winnow",
 ]
 
@@ -361,7 +406,7 @@ dependencies = [
 name = "hyve-serde"
 version = "0.1.0-alpha.1"
 dependencies = [
- "hyve-core",
+ "hyve-core 0.1.0-alpha.1",
  "rkyv",
 ]
 
@@ -370,10 +415,18 @@ name = "hyve-state"
 version = "0.1.0-alpha.1"
 
 [[package]]
+name = "hyve-trace"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "hyve-core 0.1.0-alpha.1",
+]
+
+[[package]]
 name = "hyve-validate"
 version = "0.1.0-alpha.1"
 dependencies = [
- "hyve-core",
+ "hyve-core 0.1.0-alpha.1",
+ "regex",
 ]
 
 [[package]]
@@ -550,6 +603,35 @@ dependencies = [
  "thiserror",
  "web-sys",
 ]
+
+[[package]]
+name = "regex"
+version = "1.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9807af0e638c12e753aa1b4e601791bf2a8f71274023c8bbeec12fc149950857"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.4.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41d60ef07df457506a0a1a2073112eb4aae5733dbd2813c3da77d1b0fd441158"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d902046e6a28a1e4c3cab97258a0ce11e994903f01c2d97a9447a0b3df85f4f6"
 
 [[package]]
 name = "rend"

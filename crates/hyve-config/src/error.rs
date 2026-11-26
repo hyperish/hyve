@@ -1,10 +1,10 @@
 //! What went wrong, and where it came from.
 
-use std::fmt;
 use std::path::{Path, PathBuf};
+use std::{collections::HashMap, fmt};
 
 use hyve_core::{HyveError, Value};
-use hyve_diagnostics::{Diagnostic, Span};
+use hyve_diagnostics::{Diagnostic, DiagnosticSource, Span};
 
 /// Where a configuration value came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,15 +83,24 @@ impl ConfigError {
     /// terminals; [`Display`](fmt::Display) gives one line per problem).
     pub fn render(&self) -> String {
         let mut out = String::from("invalid configuration\n");
+        let mut sources = HashMap::new();
         for p in &self.problems {
-            match (p.source.as_ref().and_then(Source::path), p.span) {
-                (Some(path), Some(span)) if self.text(path).is_some() => {
+            let source = p
+                .source
+                .as_ref()
+                .and_then(Source::path)
+                .and_then(|path| self.text(path).map(|text| (path, text)));
+            match (source, p.span) {
+                (Some((path, text)), Some(span)) => {
+                    let source = sources
+                        .entry(path)
+                        .or_insert_with(|| DiagnosticSource::new(display_path(path), text));
                     let mut d = Diagnostic::error(format!("`{}`: {}", p.key, p.message))
                         .with_label(span, "here");
                     if let Some(help) = &p.help {
                         d = d.with_help(help.clone());
                     }
-                    out.push_str(&d.render(&display_path(path), self.text(path).unwrap_or("")));
+                    out.push_str(&source.render(&d));
                 }
                 _ => {
                     out.push_str(&format!("error: {}\n", self.line(p)));

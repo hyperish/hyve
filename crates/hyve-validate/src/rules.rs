@@ -10,10 +10,79 @@
 use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::ops::{Bound, RangeBounds};
+use std::sync::OnceLock;
 
 use hyve_core::Value;
 
 use crate::{Constraint, FieldPath, Violation, Violations};
+
+/// A string field accepted by the pattern rule.
+#[diagnostic::on_unimplemented(message = "`pattern` requires a String or Option<String> field")]
+pub trait PatternText {
+    /// Returns the present string, if any.
+    fn pattern_text(&self) -> Option<&str>;
+}
+
+impl PatternText for String {
+    fn pattern_text(&self) -> Option<&str> {
+        Some(self.as_str())
+    }
+}
+
+impl PatternText for Option<String> {
+    fn pattern_text(&self) -> Option<&str> {
+        self.as_deref()
+    }
+}
+
+/// Storage for a pattern whose literal was checked by the model macro.
+#[doc(hidden)]
+pub struct Pattern {
+    source: &'static str,
+    compiled: OnceLock<regex::Regex>,
+}
+
+impl Pattern {
+    /// Creates the static at the declaration site.
+    pub const fn new(source: &'static str) -> Self {
+        Self {
+            source,
+            compiled: OnceLock::new(),
+        }
+    }
+
+    /// Checks the field, compiling once on its first present value.
+    pub fn validate(&self, value: &impl PatternText, path: &FieldPath, out: &mut Violations) {
+        let Some(text) = value.pattern_text() else {
+            return;
+        };
+        let regex = self
+            .compiled
+            .get_or_init(|| regex::Regex::new(self.source).expect("pattern validated by #[model]"));
+        if !regex.is_match(text) {
+            let mut params = Value::map();
+            params.insert("pattern", self.source);
+            out.push(Violation {
+                path: path.as_str().to_owned(),
+                rule: "pattern",
+                message: "does not match the required pattern".into(),
+                params,
+            });
+        }
+    }
+}
+
+/// Checks a user predicate at its field or model path.
+pub fn check<T>(value: &T, predicate: fn(&T) -> bool, path: &FieldPath, out: &mut Violations) {
+    if !predicate(value) {
+        out.push(Violation {
+            path: path.as_str().to_owned(),
+            rule: "check",
+            message: "does not satisfy the model constraint".into(),
+            params: Value::map(),
+        });
+    }
+}
 
 /// Things with a length for the `len` rule.
 #[diagnostic::on_unimplemented(

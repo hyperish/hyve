@@ -13,6 +13,45 @@ mod server;
 mod test_attr;
 mod util;
 
+/// Implementation of the facade's `asset!` macro.
+#[proc_macro]
+#[doc(hidden)]
+pub fn asset_bytes(input: TokenStream) -> TokenStream {
+    let path = parse_macro_input!(input as syn::LitStr);
+    let logical = path.value();
+    let relative = logical.strip_prefix('/').unwrap_or(&logical);
+    if relative.contains(['\\', ':', '\0'])
+        || relative
+            .split('/')
+            .any(|piece| matches!(piece, "" | "." | ".."))
+    {
+        return util::error_at(
+            &path,
+            "invalid asset path",
+            "use a slash-separated path inside the declaring package",
+        )
+        .into_compile_error()
+        .into();
+    }
+    let root = std::env::var_os("CARGO_MANIFEST_DIR").map(std::path::PathBuf::from);
+    let found = root.and_then(|root| {
+        let root = root.canonicalize().ok()?;
+        let file = root.join(relative).canonicalize().ok()?;
+        (file.starts_with(root) && file.is_file()).then_some(())
+    });
+    if found.is_none() {
+        return util::error_at(
+            &path,
+            format!("asset `{logical}` is not a file inside the declaring package"),
+            "check the path relative to Cargo.toml",
+        )
+        .into_compile_error()
+        .into();
+    }
+    // include_bytes! makes rustc track the resource across incremental builds.
+    quote::quote_spanned!(path.span()=> ::core::include_bytes!(::core::concat!(::core::env!("CARGO_MANIFEST_DIR"), "/", #relative))).into()
+}
+
 /// Declares a model: binary (fast rail) and JSON (standard rail) codecs,
 /// validation, schema metadata and a schema fingerprint from one definition.
 ///
@@ -20,7 +59,9 @@ mod util;
 ///   variants. JSON field names are `camelCase`; enum values are `snake_case`
 ///   strings. `Option` fields may be omitted in JSON.
 /// - Field rules: `#[validate(len = <range>)]` (strings in characters, lists,
-///   maps) and `#[validate(range = <range>)]` (numbers).
+///   maps), `range = <range>` (numbers), `pattern = "..."` (strings), and
+///   `check = path` (a predicate taking a reference to the field).
+/// - `#[model(check = path)]` adds a predicate on the complete model.
 /// - Other attributes, including `#[derive(...)]`, pass through unchanged;
 ///   `#[model]` derives nothing else.
 /// - `usize`/`isize` fields are rejected (their binary width is fixed at 32

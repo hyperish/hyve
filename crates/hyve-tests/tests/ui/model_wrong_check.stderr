@@ -1,0 +1,16 @@
+error[E0308]: mismatched types
+ --> tests/ui/model_wrong_check.rs:3:17
+  |
+3 | #[model(check = check)]
+  | ----------------^^^^^--
+  | |               |
+  | |               expected fn pointer, found fn item
+  | arguments to this function are incorrect
+  |
+  = note: expected fn pointer `for<'a> fn(&'a Name) -> bool`
+                found fn item `for<'a> fn(&'a i32) -> bool {check}`
+note: function defined here
+ --> $WORKSPACE/crates/hyve-validate/src/rules.rs
+  |
+  | pub fn check<T>(value: &T, predicate: fn(&T) -> bool, path: &FieldPath, out: &mut Violations) {
+  |        ^^^^^

@@ -10,7 +10,6 @@ authors.workspace = true
 
 [dependencies]
 hyve-diagnostics.workspace = true
-winnow.workspace = true
 
 [lints]
 workspace = true

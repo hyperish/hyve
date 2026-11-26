@@ -11,38 +11,7 @@ use std::path::{Path, PathBuf};
 
 use hyve::parser::{TomlTable, TomlValue, parse_toml};
 
-const CORE: [&str; 6] = [
-    "hyve-core",
-    "hyve-state",
-    "hyve-serde",
-    "hyve-validate",
-    "hyve-config",
-    "hyve-api",
-];
-
-const FORBIDDEN: [(&str, &str); 21] = [
-    ("tokio", "async runtime"),
-    ("async-std", "async runtime"),
-    ("smol", "async runtime"),
-    ("async-executor", "async runtime"),
-    ("async-io", "async runtime"),
-    ("mio", "async runtime"),
-    ("futures-executor", "async runtime"),
-    ("http", "HTTP"),
-    ("hyper", "HTTP"),
-    ("h2", "HTTP"),
-    ("reqwest", "HTTP"),
-    ("ureq", "HTTP"),
-    ("axum", "HTTP"),
-    ("web-sys", "DOM"),
-    ("wgpu", "GPU"),
-    ("wgpu-core", "GPU"),
-    ("wgpu-hal", "GPU"),
-    ("ash", "GPU"),
-    ("metal", "GPU"),
-    ("glow", "GPU"),
-    ("winit", "windowing"),
-];
+use hyve::diagnostics::boundary::{CORE, FORBIDDEN};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

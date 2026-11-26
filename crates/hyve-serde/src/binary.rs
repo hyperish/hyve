@@ -13,6 +13,7 @@ use rkyv::validation::archive::ArchiveValidator;
 use rkyv::validation::shared::SharedValidator;
 use rkyv::{Archive, Deserialize, Portable, Serialize};
 
+use crate::archive_scratch::{ALIGN, with_aligned};
 use crate::{DecodeError, EncodeError};
 
 /// Deepest nesting of out-of-line data (`Vec`, `String`, `Box`, nested
@@ -20,9 +21,6 @@ use crate::{DecodeError, EncodeError};
 /// reader's default depth. Validation of deeper archives fails instead of
 /// exhausting the stack.
 pub const MAX_BINARY_DEPTH: usize = 128;
-
-/// Alignment of encoded buffers (`rkyv::util::AlignedVec`'s default).
-const ALIGN: usize = 16;
 
 /// Encoded bytes, aligned for zero-copy access.
 #[derive(Debug, Default, Clone)]
@@ -118,13 +116,4 @@ where
         SharedValidator::new(),
     );
     rkyv::api::access_with_context::<A, _, RkyvError>(bytes, &mut validator)
-}
-
-fn with_aligned<R>(bytes: &[u8], f: impl FnOnce(&[u8]) -> R) -> R {
-    if (bytes.as_ptr() as usize) % ALIGN == 0 {
-        f(bytes)
-    } else {
-        let copy = AlignedBytes::copy_from(bytes);
-        f(&copy)
-    }
 }

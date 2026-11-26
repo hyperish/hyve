@@ -79,6 +79,11 @@ impl std::error::Error for InvalidRequestId {}
 pub struct TraceId([u8; 16]);
 
 impl TraceId {
+    /// Restores a trace ID from its wire representation. Zero is reserved.
+    pub fn from_bytes(bytes: [u8; 16]) -> Option<Self> {
+        (bytes != [0; 16]).then_some(Self(bytes))
+    }
+
     /// A fresh random trace ID.
     pub fn new() -> Self {
         loop {

@@ -160,7 +160,7 @@ impl State {
 }
 
 pub(crate) struct Runtime {
-    id: u32,
+    pub(crate) id: u32,
     state: RefCell<State>,
 }
 
@@ -215,6 +215,20 @@ impl Runtime {
 
     pub(crate) fn is_alive(&self, id: NodeId) -> bool {
         id.runtime == self.id && self.state.borrow().node_alive(id.index, id.generation)
+    }
+
+    pub(crate) fn observing(&self) -> bool {
+        self.state.borrow().observer.is_some()
+    }
+
+    /// A foreign shared signal has one dependency node per observing thread.
+    pub(crate) fn mirror(&self) -> NodeId {
+        let root = OwnerId {
+            runtime: self.id,
+            index: 0,
+            generation: 0,
+        };
+        self.with_owner(root, || self.create(Kind::Signal, Some(Rc::new(())), None))
     }
 
     // ----- creation -----

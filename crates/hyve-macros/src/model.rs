@@ -11,39 +11,49 @@ use syn::{
 
 use crate::util::{Krate, camel_case, error, error_at, mentions, snake_case};
 
-/// `#[model]` / `#[model(crate = path)]`.
+/// Optional facade path and whole-model predicate.
 pub(crate) struct ModelArgs {
     pub(crate) krate: Krate,
+    check: Option<syn::Path>,
 }
 
 impl Parse for ModelArgs {
     fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
-        let mut krate = Krate::default();
-        if input.is_empty() {
-            return Ok(ModelArgs { krate });
+        let mut krate = None;
+        let mut check = None;
+        while !input.is_empty() {
+            let key: Ident = input.call(syn::ext::IdentExt::parse_any)?;
+            input.parse::<syn::Token![=]>()?;
+            match key.to_string().as_str() {
+                "crate" if krate.is_none() => krate = Some(Krate::from_path(&input.parse()?)),
+                "check" if check.is_none() => check = Some(input.parse()?),
+                "crate" | "check" => {
+                    return Err(syn::Error::new(key.span(), "duplicate model argument"));
+                }
+                _ => {
+                    return Err(error_at(
+                        &key,
+                        format!("unknown model argument `{key}`"),
+                        "use `#[model]`, or `#[model(check = path)]` for a whole-model predicate",
+                    ));
+                }
+            }
+            if input.is_empty() {
+                break;
+            }
+            input.parse::<syn::Token![,]>()?;
         }
-        let key: Ident = input.call(syn::ext::IdentExt::parse_any)?;
-        if key != "crate" {
-            return Err(error_at(
-                &key,
-                format!("`#[model]` takes no arguments, found `{key}`"),
-                "write `#[model]` and put rules on fields: `#[validate(len = 1..=80)] pub name: String`",
-            ));
-        }
-        input.parse::<syn::Token![=]>()?;
-        let path: syn::Path = input.parse()?;
-        krate = Krate::from_path(&path);
-        if !input.is_empty() {
-            return Err(input.error("unexpected tokens after `crate = <path>`"));
-        }
-        Ok(ModelArgs { krate })
+        Ok(ModelArgs {
+            krate: krate.unwrap_or_default(),
+            check,
+        })
     }
 }
 
 pub(crate) fn expand(args: ModelArgs, item: Item) -> syn::Result<TokenStream> {
     match item {
-        Item::Struct(s) => expand_struct(s, &args.krate, None),
-        Item::Enum(e) => expand_enum(e, &args.krate),
+        Item::Struct(s) => expand_struct(s, &args.krate, None, args.check.as_ref()),
+        Item::Enum(e) => expand_enum(e, &args.krate, args.check.as_ref()),
         other => Err(error_at(
             &other,
             "`#[model]` applies to structs with named fields and to enums with unit variants",
@@ -52,14 +62,11 @@ pub(crate) fn expand(args: ModelArgs, item: Item) -> syn::Result<TokenStream> {
     }
 }
 
-struct Rule {
-    kind: RuleKind,
-    expr: Expr,
-}
-
-enum RuleKind {
-    Len,
-    Range,
+enum Rule {
+    Len(Expr),
+    Range(Expr),
+    Pattern(syn::LitStr),
+    Check(syn::Path),
 }
 
 struct Field {
@@ -80,23 +87,31 @@ fn take_rules(attrs: &mut Vec<Attribute>) -> syn::Result<Vec<Rule>> {
         }
         let parsed = match &attr.meta {
             syn::Meta::List(_) => attr.parse_nested_meta(|meta| {
-                let kind = if meta.path.is_ident("len") {
-                    RuleKind::Len
-                } else if meta.path.is_ident("range") {
-                    RuleKind::Range
+                let rule = if meta.path.is_ident("len") || meta.path.is_ident("range") {
+                    let expr = meta.value().map_err(|_| {
+                        error_at(&meta.path, "a validation rule needs a range", "write it as `len = 1..=80` or `range = 0.0..=1.0`")
+                    })?.parse()?;
+                    if meta.path.is_ident("len") { Rule::Len(expr) } else { Rule::Range(expr) }
+                } else if meta.path.is_ident("pattern") {
+                    let pattern: syn::LitStr = meta.value()?.parse()?;
+                    if rules.iter().any(|rule| matches!(rule, Rule::Pattern(_))) {
+                        return Err(meta.error("a field can declare one pattern"));
+                    }
+                    regex::Regex::new(&pattern.value()).map_err(|err| {
+                        error_at(&pattern, format!("invalid validation pattern: {err}"), "use a valid Rust regex string literal")
+                    })?;
+                    Rule::Pattern(pattern)
+                } else if meta.path.is_ident("check") {
+                    Rule::Check(meta.value()?.parse()?)
                 } else {
                     let name = meta.path.get_ident().map(|i| i.to_string()).unwrap_or_else(|| "?".into());
                     return Err(error_at(
                         &meta.path,
                         format!("unknown validation rule `{name}`"),
-                        "Phase 1 rules are `len = <range>` and `range = <range>`, e.g. `#[validate(len = 1..=80)]` or `#[validate(range = 30..=240)]`",
+                        "use `len = <range>`, `range = <range>`, `pattern = \"...\"` or `check = path`",
                     ));
                 };
-                let expr: Expr = meta.value().map_err(|_| {
-                    error_at(&meta.path, "a validation rule needs a range", "write it as `len = 1..=80` or `range = 0.0..=1.0`")
-                })?
-                .parse()?;
-                rules.push(Rule { kind, expr });
+                rules.push(rule);
                 Ok(())
             }),
             _ => Err(error_at(
@@ -180,6 +195,7 @@ pub(crate) fn expand_struct(
     mut s: ItemStruct,
     krate: &Krate,
     schema_name: Option<String>,
+    check: Option<&syn::Path>,
 ) -> syn::Result<TokenStream> {
     reject_validate_attr(&s.attrs, "a whole struct")?;
     check_generics(&s.generics)?;
@@ -309,13 +325,14 @@ pub(crate) fn expand_struct(
     // ----- validation -----
     let checks = fields.iter().map(|f| {
         let (ident, key) = (&f.ident, &f.json);
-        let rules = f.rules.iter().map(|r| {
-            let expr = &r.expr;
-            let span = expr.span();
-            match r.kind {
-                RuleKind::Len => quote_spanned!(span=> #validate::rules::len(&self.#ident, #expr, __path, __out);),
-                RuleKind::Range => quote_spanned!(span=> #validate::rules::range(&self.#ident, #expr, __path, __out);),
-            }
+        let rules = f.rules.iter().map(|rule| match rule {
+            Rule::Len(expr) => quote_spanned!(expr.span()=> #validate::rules::len(&self.#ident, #expr, __path, __out);),
+            Rule::Range(expr) => quote_spanned!(expr.span()=> #validate::rules::range(&self.#ident, #expr, __path, __out);),
+            Rule::Pattern(pattern) => quote_spanned!(pattern.span()=> {
+                static PATTERN: #validate::rules::Pattern = #validate::rules::Pattern::new(#pattern);
+                PATTERN.validate(&self.#ident, __path, __out);
+            }),
+            Rule::Check(path) => quote_spanned!(path.span()=> #validate::rules::check(&self.#ident, #path, __path, __out);),
         });
         quote! {
             __path.push_field(#key);
@@ -330,14 +347,11 @@ pub(crate) fn expand_struct(
         let (ty, key) = (&f.ty, &f.json);
         let rust_name = f.ident.to_string();
         let rust_name = rust_name.strip_prefix("r#").unwrap_or(&rust_name).to_owned();
-        let constraints = f.rules.iter().map(|r| {
-            let expr = &r.expr;
-            match r.kind {
-                RuleKind::Len => quote!(#validate::rules::len_constraint(#expr)),
-                RuleKind::Range => {
-                    quote!(#validate::rules::range_constraint(::core::marker::PhantomData::<fn(&#ty)>, #expr))
-                }
-            }
+        let constraints = f.rules.iter().map(|rule| match rule {
+            Rule::Len(expr) => quote!(#validate::rules::len_constraint(#expr)),
+            Rule::Range(expr) => quote!(#validate::rules::range_constraint(::core::marker::PhantomData::<fn(&#ty)>, #expr)),
+            Rule::Pattern(pattern) => quote!(#validate::Constraint::Pattern(#pattern)),
+            Rule::Check(_) => quote!(#validate::Constraint::Check),
         });
         quote! {
             #validate::FieldSchema {
@@ -351,6 +365,7 @@ pub(crate) fn expand_struct(
     });
     let params = type_params(&s.generics);
     let schema_name = schema_name.unwrap_or_else(|| name_str.clone());
+    let (model_check, define) = model_predicate(check, &validate);
     let def_name = if params.is_empty() {
         quote!(#schema_name)
     } else {
@@ -418,6 +433,7 @@ pub(crate) fn expand_struct(
             fn validate_at(&self, __path: &mut #validate::FieldPath, __out: &mut #validate::Violations) {
                 let __mark = __path.mark();
                 #(#checks)*
+                #model_check
                 let _ = __mark;
             }
         }
@@ -425,7 +441,7 @@ pub(crate) fn expand_struct(
         impl #is #validate::Schema for #name #ts #ws {
             fn schema(__reg: &mut #validate::SchemaRegistry) -> #validate::SchemaNode {
                 let __name = #def_name;
-                __reg.define::<Self>(__name, |__reg| {
+                __reg.#define::<Self>(__name, |__reg| {
                     #validate::Definition::Object(::std::vec![#(#field_schemas),*])
                 })
             }
@@ -439,7 +455,17 @@ pub(crate) fn expand_struct(
     })
 }
 
-fn expand_enum(e: ItemEnum, krate: &Krate) -> syn::Result<TokenStream> {
+fn model_predicate(check: Option<&syn::Path>, validate: &TokenStream) -> (TokenStream, Ident) {
+    match check {
+        Some(path) => (
+            quote_spanned!(path.span()=> #validate::rules::check(self, #path, __path, __out);),
+            format_ident!("define_checked"),
+        ),
+        None => (TokenStream::new(), format_ident!("define")),
+    }
+}
+
+fn expand_enum(e: ItemEnum, krate: &Krate, check: Option<&syn::Path>) -> syn::Result<TokenStream> {
     reject_validate_attr(&e.attrs, "an enum")?;
     if !e.generics.params.is_empty() {
         return Err(error_at(
@@ -473,6 +499,7 @@ fn expand_enum(e: ItemEnum, krate: &Krate) -> syn::Result<TokenStream> {
     let name_str = name.to_string();
     let serde = krate.serde();
     let validate = krate.validate();
+    let (model_check, define) = model_predicate(check, &validate);
     let json = quote!(#serde::json);
     let enc = values.iter().map(|(v, s)| quote!(#name::#v => #s,));
     let dec = values.iter().map(|(v, s)| quote!(#s => #name::#v,));
@@ -513,12 +540,14 @@ fn expand_enum(e: ItemEnum, krate: &Krate) -> syn::Result<TokenStream> {
         }
 
         impl #validate::Validate for #name {
-            fn validate_at(&self, _: &mut #validate::FieldPath, _: &mut #validate::Violations) {}
+            fn validate_at(&self, __path: &mut #validate::FieldPath, __out: &mut #validate::Violations) {
+                #model_check
+            }
         }
 
         impl #validate::Schema for #name {
             fn schema(__reg: &mut #validate::SchemaRegistry) -> #validate::SchemaNode {
-                __reg.define::<Self>(#name_str, |_| #validate::Definition::Enum(::std::vec![#(#names),*]))
+                __reg.#define::<Self>(#name_str, |_| #validate::Definition::Enum(::std::vec![#(#names),*]))
             }
         }
 

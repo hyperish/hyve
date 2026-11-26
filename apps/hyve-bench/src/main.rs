@@ -856,15 +856,26 @@ fn rings() {
     // number of pushes and of torn samples a reader saw (0).
     fn contended<R: Send + 'static>(
         n: u64,
-        push: impl FnMut(u64),
+        mut push: impl FnMut(u64),
         reader: R,
         read: fn(&mut R) -> (u64, u64),
     ) -> (Duration, Check) {
         let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stop2 = stop.clone();
+        let (ready, started) = std::sync::mpsc::sync_channel(0);
+        push(0);
         let handle = std::thread::spawn(move || {
             let mut reader = reader;
-            let (mut seen, mut torn) = (0u64, 0u64);
+            // Wait for a real first sample before timing. A short warm-up can otherwise
+            // finish before Windows schedules the reader for the first time.
+            let (mut seen, mut torn) = loop {
+                let first = read(&mut reader);
+                if first.0 > 0 {
+                    break first;
+                }
+                std::thread::yield_now();
+            };
+            ready.send(()).unwrap();
             while !stop2.load(Ordering::Relaxed) {
                 let (s, t) = read(&mut reader);
                 seen += s;
@@ -872,9 +883,9 @@ fn rings() {
             }
             (seen, torn)
         });
-        let mut push = push;
+        started.recv().unwrap();
         let t = Instant::now();
-        for i in 0..n {
+        for i in 1..=n {
             push(i);
         }
         let e = t.elapsed();
@@ -945,6 +956,8 @@ fn main() {
     println!(
         "hyve-bench: {SAMPLES} interleaved samples per library; median and range of time per operation"
     );
+    parser_benchmarks();
+    diagnostic_and_pod_benchmarks();
     scenario(
         "signal create",
         10_000,
@@ -1044,4 +1057,221 @@ fn main() {
     codecs();
     ids();
     rings();
+}
+
+fn parser_benchmarks() {
+    const DURATIONS: &[&str] = &["30s", "1d2h3m4s5ms", "500ms", "00002h"];
+    const DOTENV: &str = "export APP_PORT=8080\nAPP_DOMAIN=localhost\nexport FEATURE_FLAG=yes\n";
+    // Compare diagnostics including byte spans across the two crate versions.
+    // Debug on the public output records all fields, including the borrowed dotenv ranges.
+    for input in [
+        "",
+        "1",
+        "0s",
+        "1m2s",
+        "18446744073709551616s",
+        "1.5s",
+        "10μs",
+        " 2s",
+        "1s2",
+    ] {
+        assert_eq!(
+            format!("{:?}", hyve::parser::parse_duration(input)),
+            format!("{:?}", hyve_parser_baseline::parse_duration(input)),
+            "duration {input:?}"
+        );
+    }
+    for input in [
+        "",
+        "A=B\nA=C",
+        "export _A1='한글'\r\n",
+        "export Aé=x",
+        "7=oops",
+        "X",
+        "Z=\"bad",
+        "A＝1",
+        "\n KEY=one # note\n B=two",
+        "A=\"escaped\\nline\"",
+    ] {
+        assert_eq!(
+            format!("{:?}", hyve::parser::parse_dotenv(input)),
+            format!("{:?}", hyve_parser_baseline::parse_dotenv(input)),
+            "dotenv {input:?}"
+        );
+    }
+    let durations = |parse: fn(&str) -> u64, n: u64| {
+        let start = Instant::now();
+        let mut sum = 0;
+        for i in 0..n {
+            sum += parse(black_box(DURATIONS[i as usize % DURATIONS.len()]));
+        }
+        (start.elapsed(), (n, sum))
+    };
+    scenario(
+        "parser duration",
+        250_000,
+        "literal",
+        &[
+            run("hyve-parser", move |n| {
+                durations(
+                    |s| hyve::parser::parse_duration(s).unwrap().as_micros() as u64,
+                    n,
+                )
+            }),
+            run("alpha.1 / winnow", move |n| {
+                durations(
+                    |s| hyve_parser_baseline::parse_duration(s).unwrap().as_micros() as u64,
+                    n,
+                )
+            }),
+        ],
+    );
+    let dotenv = |parse: fn(&str) -> usize, n: u64| {
+        let start = Instant::now();
+        let mut sum = 0;
+        for _ in 0..n {
+            sum += parse(black_box(DOTENV)) as u64
+        }
+        (start.elapsed(), (n, sum))
+    };
+    scenario(
+        "parser dotenv",
+        100_000,
+        "document",
+        &[
+            run("hyve-parser", move |n| {
+                dotenv(
+                    |s| {
+                        hyve::parser::parse_dotenv(s)
+                            .unwrap()
+                            .iter()
+                            .map(|e| e.key.len() + e.value.len())
+                            .sum()
+                    },
+                    n,
+                )
+            }),
+            run("alpha.1 / winnow", move |n| {
+                dotenv(
+                    |s| {
+                        hyve_parser_baseline::parse_dotenv(s)
+                            .unwrap()
+                            .iter()
+                            .map(|e| e.key.len() + e.value.len())
+                            .sum()
+                    },
+                    n,
+                )
+            }),
+        ],
+    );
+}
+
+fn diagnostic_and_pod_benchmarks() {
+    use hyve_diagnostics::DiagnosticSource;
+    let source = "홈 = '서울'\r\nother = 24\n".repeat(256);
+    let offsets: Vec<_> = source
+        .match_indices("서울")
+        .step_by(32)
+        .map(|(i, _)| i)
+        .collect();
+    let reports: Vec<_> = offsets
+        .iter()
+        .map(|&i| {
+            hyve_diagnostics::Diagnostic::error("unexpected city").with_label(i..i + 6, "city")
+        })
+        .collect();
+    let old_reports: Vec<_> = offsets
+        .iter()
+        .map(|&i| {
+            hyve_diagnostics_baseline::Diagnostic::error("unexpected city")
+                .with_label(i..i + 6, "city")
+        })
+        .collect();
+    let cached = DiagnosticSource::new("unicode.toml", &source);
+    for (new, old) in reports.iter().zip(&old_reports) {
+        assert_eq!(cached.render(new), old.render("unicode.toml", &source));
+        assert_eq!(
+            new.render_colored("unicode.toml", &source),
+            old.render_colored("unicode.toml", &source)
+        );
+    }
+    let first = source.clone();
+    scenario(
+        "source specialization: render 8 located errors in a 512-line file",
+        80,
+        "batch",
+        &[
+            run("hyve-diagnostics, cached source", move |n| {
+                let start = Instant::now();
+                let mut sum = 0;
+                for _ in 0..n {
+                    let index = DiagnosticSource::new("unicode.toml", black_box(&first));
+                    for report in &reports {
+                        sum += black_box(index.render(report)).len() as u64;
+                    }
+                }
+                (start.elapsed(), (n, sum))
+            }),
+            run("published diagnostics alpha.1", move |n| {
+                let start = Instant::now();
+                let mut sum = 0;
+                for _ in 0..n {
+                    for report in &old_reports {
+                        sum += black_box(report.render("unicode.toml", black_box(&source))).len()
+                            as u64;
+                    }
+                }
+                (start.elapsed(), (n, sum))
+            }),
+        ],
+    );
+    // Both published and local rings are monomorphized for the exact same POD type.
+    macro_rules! ring_runs {
+        ($name:literal, $bench:ident) => {
+            [
+                run(concat!("hyve-core ", $name), |n| $bench!(hyve_core, n)),
+                run(concat!("published alpha.1 ", $name), |n| {
+                    $bench!(hyve_core_baseline, n)
+                }),
+            ]
+        };
+    }
+    macro_rules! create {
+        ($lib:ident,$n:ident) => {{
+            let start = Instant::now();
+            let mut capacity = 0;
+            for _ in 0..$n {
+                let ring = black_box($lib::SharedRingBuf::<Sample>::new(RING));
+                capacity += ring.capacity() as u64;
+            }
+            (start.elapsed(), ($n, capacity))
+        }};
+    }
+    macro_rules! exchange {
+        ($lib:ident,$n:ident) => {{
+            let ring = $lib::SharedRingBuf::<[u8; 11]>::new(RING);
+            let mut out = [[0; 11]; 4];
+            let mut sum = 0;
+            let start = Instant::now();
+            for i in 0..$n {
+                ring.push(black_box([i as u8; 11]));
+                let k = ring.read_latest_snapshot(black_box(&mut out));
+                sum += u64::from(out[k - 1][10]);
+            }
+            (start.elapsed(), ($n, sum))
+        }};
+    }
+    scenario(
+        "source specialization: allocate and drop a 1024-slot POD ring",
+        2_000,
+        "ring",
+        &ring_runs!("create", create),
+    );
+    scenario(
+        "source specialization: unaligned 11-byte POD push and snapshot",
+        200_000,
+        "exchange",
+        &ring_runs!("exchange", exchange),
+    );
 }

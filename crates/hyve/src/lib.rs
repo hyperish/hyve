@@ -51,6 +51,9 @@
 
 extern crate self as hyve;
 
+#[cfg(all(feature = "ipc", any(unix, windows), not(target_arch = "wasm32")))]
+pub mod ipc;
+
 pub use hyve_core::*;
 pub use hyve_macros::{model, server, server_ctx, test, validate};
 
@@ -60,13 +63,24 @@ pub use hyve_diagnostics as diagnostics;
 pub use hyve_parser as parser;
 pub use hyve_serde as serde;
 pub use hyve_state as state;
+pub use hyve_trace as trace;
 pub use hyve_validate as validate;
+
+/// Embeds a file from the declaring package. An optional leading slash
+/// denotes the package root. A missing file is a compile-time error.
+#[macro_export]
+macro_rules! asset {
+    ($path:literal $(,)?) => {
+        $crate::Asset::embedded($path, $crate::__private::asset_bytes!($path))
+    };
+}
 
 /// Everything most code needs: `use hyve::prelude::*;`.
 ///
 /// `#[hyve::test]` is not in the prelude (it would clash with the built-in
 /// `#[test]`); write it with its path.
 pub mod prelude {
+    pub use crate::asset;
     pub use hyve_api::{CursorParams, Page, Path, Query};
     pub use hyve_config as config;
     pub use hyve_core::{
@@ -76,7 +90,7 @@ pub mod prelude {
     pub use hyve_macros::{model, server, server_ctx, validate};
     pub use hyve_state::{
         Effect, LocalSignal, Memo, Owner, Signal, batch, effect, local_signal, memo, on_cleanup,
-        signal, untrack,
+        shared_signal, signal, untrack,
     };
     pub use hyve_validate::Valid;
 }
@@ -85,6 +99,7 @@ pub mod prelude {
 pub mod __private {
     pub use hyve_api as api;
     pub use hyve_core as core;
+    pub use hyve_macros::asset_bytes;
     pub use hyve_serde as serde;
     pub use hyve_serde::__private::rkyv;
     pub use hyve_validate as validate;
@@ -126,3 +141,7 @@ pub mod __private {
         }
     }
 }
+
+/// Signed artifact update API for native apps.
+#[cfg(all(feature = "update", not(target_arch = "wasm32")))]
+pub use hyve_update as update;

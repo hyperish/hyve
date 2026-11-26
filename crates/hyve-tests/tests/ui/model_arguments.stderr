@@ -1,5 +1,5 @@
-error: `#[model]` takes no arguments, found `rename_all`
-         = help: write `#[model]` and put rules on fields: `#[validate(len = 1..=80)] pub name: String`
+error: unknown model argument `rename_all`
+         = help: use `#[model]`, or `#[model(check = path)]` for a whole-model predicate
  --> tests/ui/model_arguments.rs:3:9
   |
 3 | #[model(rename_all = "snake_case")]

@@ -1,0 +1,9 @@
+error: invalid validation pattern: regex parse error:
+           [
+           ^
+       error: unclosed character class
+         = help: use a valid Rust regex string literal
+ --> tests/ui/model_invalid_pattern.rs:5:26
+  |
+5 |     #[validate(pattern = "[")]
+  |                          ^^^

@@ -5,7 +5,7 @@
 //! (for example 64-bit integers that may travel as strings).
 
 use std::any::type_name;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use hyve_core::{Id, Timestamp, Ulid, Value};
 
@@ -56,6 +56,10 @@ pub enum SchemaNode {
 /// A rule attached to a field.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constraint {
+    /// A Rust regular expression applied to a string.
+    Pattern(&'static str),
+    /// The field has a user-supplied predicate.
+    Check,
     /// Inclusive length bounds.
     Len {
         /// Minimum.
@@ -107,6 +111,7 @@ pub enum Definition {
 pub struct SchemaRegistry {
     names: HashMap<&'static str, String>,
     definitions: BTreeMap<String, Option<Definition>>,
+    checked: HashSet<String>,
 }
 
 impl SchemaRegistry {
@@ -145,6 +150,25 @@ impl SchemaRegistry {
     /// The schema of `T`, registering whatever it references.
     pub fn schema_of<T: Schema + ?Sized>(&mut self) -> SchemaNode {
         T::schema(self)
+    }
+
+    /// Registers a model with a whole-value predicate. The definition itself
+    /// retains its ordinary shape for consumers that only need the fields.
+    pub fn define_checked<T: ?Sized + 'static>(
+        &mut self,
+        short_name: impl Into<String>,
+        build: impl FnOnce(&mut SchemaRegistry) -> Definition,
+    ) -> SchemaNode {
+        let node = self.define::<T>(short_name, build);
+        if let SchemaNode::Ref(name) = &node {
+            self.checked.insert(name.clone());
+        }
+        node
+    }
+
+    /// Whether the named definition has a whole-value predicate.
+    pub fn has_check(&self, name: &str) -> bool {
+        self.checked.contains(name)
     }
 
     /// Finished definitions by name.

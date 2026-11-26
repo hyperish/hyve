@@ -24,15 +24,18 @@
 //! - Reading and writing *other* signals inside `update`/`with` closures is
 //!   allowed; effects triggered there run after the closure returns.
 //!
-//! Phase 1 storage is thread-local: [`Signal`] handles are `Send + Sync` so
-//! they can be captured freely, but using one on another thread panics.
-//! Multi-threaded shared storage arrives in Phase 2.
+//! [`signal`] uses the creating thread's arena. [`shared_signal`] returns
+//! the same handle type with a value accessible on worker threads. Observers
+//! run on their own thread when its event loop calls [`drain_shared_updates`].
 //!
 //! The graph algorithm follows `reactive_graph` (push-pull, three node
 //! states); the arena, owner tree and handle surface are our own.
 
 mod callable;
 mod runtime;
+mod shared;
+
+pub use shared::{SharedWake, drain_shared_updates, on_shared_wake, shared_signal};
 
 use std::cell::RefCell;
 use std::fmt;
@@ -55,6 +58,7 @@ macro_rules! signal_type {
         $(#[$meta])*
         pub struct $name<T: 'static> {
             id: NodeId,
+            shared: bool,
             _marker: PhantomData<$marker>,
         }
 
@@ -85,7 +89,7 @@ macro_rules! signal_type {
         pub fn $ctor<T: $($bounds)*>(value: T) -> $name<T> {
             let cell: Rc<dyn std::any::Any> = Rc::new(RefCell::new(value));
             let id = Runtime::with(|rt| rt.create(Kind::Signal, Some(cell), None));
-            $name { id, _marker: PhantomData }
+            $name { id, shared: false, _marker: PhantomData }
         }
 
         impl<T: 'static> $name<T> {
@@ -96,6 +100,9 @@ macro_rules! signal_type {
             }
 
             fn read<R>(&self, track: bool, f: impl FnOnce(&T) -> R) -> R {
+                if self.shared {
+                    return batch(|| shared::read(self.id, track, f));
+                }
                 batch(|| {
                     let cell = self.cell(track);
                     let value = cell.try_borrow().unwrap_or_else(|_| {
@@ -119,6 +126,10 @@ macro_rules! signal_type {
             /// closure returns. The closure may read and write other signals;
             /// effects run after it finishes.
             pub fn update(&self, f: impl FnOnce(&mut T)) {
+                if self.shared {
+                    batch(|| shared::update(self.id, f));
+                    return;
+                }
                 batch(|| {
                     let cell = self.cell(false);
                     {
@@ -138,11 +149,13 @@ macro_rules! signal_type {
 
             /// Whether the signal (and its owner scope) is still alive.
             pub fn is_alive(&self) -> bool {
+                if self.shared { return shared::is_alive(self.id); }
                 Runtime::with(|rt| rt.is_alive(self.id))
             }
 
             /// Frees the signal now instead of with its owner scope.
             pub fn dispose(self) {
+                if self.shared { shared::dispose(self.id); return; }
                 Runtime::with(|rt| rt.dispose_node(self.id));
             }
         }

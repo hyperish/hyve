@@ -14,6 +14,7 @@
 //! Generated code refers to `rkyv` only through [`__private`], so the `rkyv`
 //! fork can later be vendored without breaking user crates.
 
+mod archive_scratch;
 mod binary;
 mod error;
 mod fingerprint;

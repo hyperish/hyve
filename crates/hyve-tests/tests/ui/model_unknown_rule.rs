@@ -2,7 +2,7 @@ use hyve::prelude::*;
 
 #[model]
 pub struct User {
-    #[validate(pattern = "^[a-z]+$")]
+    #[validate(prefix = "user")]
     pub name: String,
 }
 

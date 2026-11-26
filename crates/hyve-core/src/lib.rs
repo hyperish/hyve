@@ -16,16 +16,47 @@
 //! This crate never depends on an async runtime, HTTP, DOM or GPU types
 //! (`docs/02-architecture.md` §2.5).
 
+mod asset;
 mod cancel;
 mod correlation;
 mod error;
 mod id;
+#[cfg(all(
+    feature = "shm",
+    target_has_atomic = "64",
+    any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "android",
+        windows
+    )
+))]
+mod mapped;
 mod platform;
+mod pod_bytes;
 mod ring;
+#[doc(hidden)]
+#[cfg(all(windows, feature = "windows-security"))]
+pub mod windows_security;
+#[cfg(all(
+    feature = "shm",
+    target_has_atomic = "64",
+    any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "android",
+        windows
+    )
+))]
+pub use mapped::MappedRing;
+
 mod scope;
 mod time;
 mod value;
 
+pub use asset::Asset;
 pub use cancel::{CancellationToken, Cancelled};
 pub use correlation::{InvalidRequestId, RequestId, TraceId};
 pub use error::{ErrorKind, HyveError, HyveResult};

@@ -3,23 +3,23 @@
 
 use std::time::Duration;
 
+use crate::winnow::take_ascii1;
 use hyve_diagnostics::{Diagnostic, Span};
-use winnow::ascii::digit1;
-use winnow::combinator::alt;
-use winnow::prelude::*;
 
 const UNITS: &str = "`d`, `h`, `m`, `s` or `ms`";
 
 /// Microseconds per unit, with the unit's rank (higher = larger).
-fn unit(input: &mut &str) -> winnow::Result<(u64, u8)> {
-    alt((
-        "ms".value((1_000u64, 0u8)),
-        "s".value((1_000_000, 1)),
-        "m".value((60_000_000, 2)),
-        "h".value((3_600_000_000, 3)),
-        "d".value((86_400_000_000, 4)),
-    ))
-    .parse_next(input)
+fn unit(input: &mut &str) -> Option<(u64, u8)> {
+    let (len, micros, rank) = match input.as_bytes() {
+        [b'm', b's', ..] => (2, 1_000, 0),
+        [b's', ..] => (1, 1_000_000, 1),
+        [b'm', ..] => (1, 60_000_000, 2),
+        [b'h', ..] => (1, 3_600_000_000, 3),
+        [b'd', ..] => (1, 86_400_000_000, 4),
+        _ => return None,
+    };
+    *input = &input[len..];
+    Some((micros, rank))
 }
 
 /// Parses a duration such as `1h30m`.
@@ -38,17 +38,15 @@ pub fn parse_duration(text: &str) -> Result<Duration, Diagnostic> {
     let mut last_rank: Option<u8> = None;
     while !rest.is_empty() {
         let start = text.len() - rest.len();
-        let digits = digit1::<_, winnow::error::ContextError>
-            .parse_next(&mut rest)
-            .map_err(|_| {
-                Diagnostic::error(format!("invalid duration `{text}`"))
-                    .with_label(Span::new(start, start + 1), "expected a number")
-                    .with_help(format!(
-                        "a duration is a number followed by a unit ({UNITS}), e.g. `1h30m`"
-                    ))
-            })?;
+        let digits = take_ascii1(&mut rest, |b| b.is_ascii_digit()).ok_or_else(|| {
+            Diagnostic::error(format!("invalid duration `{text}`"))
+                .with_label(Span::new(start, start + 1), "expected a number")
+                .with_help(format!(
+                    "a duration is a number followed by a unit ({UNITS}), e.g. `1h30m`"
+                ))
+        })?;
         let unit_start = text.len() - rest.len();
-        let (micros, rank) = unit.parse_next(&mut rest).map_err(|_| {
+        let (micros, rank) = unit(&mut rest).ok_or_else(|| {
             let end = (unit_start + 1).min(text.len()).max(unit_start);
             Diagnostic::error(format!("invalid duration `{text}`"))
                 .with_label(Span::new(unit_start, end), "expected a unit")
