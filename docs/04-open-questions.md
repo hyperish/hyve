@@ -1,26 +1,27 @@
-# 04. 열린 결정 (hyve)
+# 04. 결정 기록 (hyve)
 
-> 상태: "열려 있는 결정"은 **미정**(방향은 **제안**), "결정됨"은 **확정** 기록(제안으로 추가한 내용은 항목 안에 표시) · 기준일: 2026-11-24
+> 기준일 2026-11-26 · 결정은 **확정**이며, 이전 기록의 제안과 구현 상태는 각 항목에 표시합니다.
 
-`hyve` 레포 범위의 미정 사항 목록입니다. 범용 명세 전체의 결정 기록은 [`hyperish/docs/docs/07-open-questions.md`](https://github.com/hyperish/docs/blob/main/docs/07-open-questions.md)에서 추적합니다.
+`hyve`의 설계 결정과 그 근거를 추적합니다.
 
 ## 열려 있는 결정
 
-| # | 결정 항목 | 왜 중요한가 | 지금의 방향(제안) |
-|---|---|---|---|
-| 1 | `hyve preview`의 바이너리 핫패칭 세부 메커니즘 (Phase 3) | Rust 컴파일 시간을 극복하고 즉각적인 피드백 루프를 만드는 고급 단계 | Phase 2 상태 보존 HMR 우선 구축 후, Phase 3에서 Subsecond 계열 바이너리 핫패칭 검토. **결정 시점: Phase 3 착수 전** (Phase 1·2를 막지 않음) |
+현재 0건입니다.
 
 ## 결정됨
 
-- **Rust/Cargo 대비 Bun 포지셔닝 확정** (2026-11-17): 올인원 CLI(`init`, `preview`, `lint`, `test`, `build`) + 기본 내장 범용 코어 모듈(`00-overview.md`)
+- **#1 · 개발 중 바이너리 핫패칭** (2026-11-26). Phase 2는 선언한 값의 스냅샷을 새 인스턴스에 복원합니다. Phase 3는 네이티브 UI의 제한된 렌더 함수에만 Subsecond를 옵트인합니다. 적용 범위를 입증할 수 없는 편집은 재시작합니다. [적용 조건과 복구](01-dx-and-dsl.md#dev-reload)
+- **검증 문법** (2026-11-26). 본문에서 Phase 2로 결정을 미뤘던 `pattern`과 모델 불변조건의 선언, 오류와 스키마 표현을 정했습니다. [검증 규칙](02-architecture.md#validation-rules)
+
+- **Rust/Cargo 대비 Bun 포지셔닝 확정** (2026-11-17): 초기화·로컬 개발·린트·테스트·빌드를 제공하는 올인원 CLI와 기본 내장 범용 코어 모듈(`00-overview.md`)
 - **`hyve-state` 반응성 코어의 `signal(0)` 표기 및 단일 `Copy` 아레나 핸들(`Signal<T>`, `!Send`만 `LocalSignal<T>` 옵트인) 확정** (2026-11-17 ~ 2026-11-19): `02-architecture.md` §2.2
 - **웹 전용 OpenAPI 제외, UI 선언적 DSL(`ui!`) 제외 및 범용 스키마·검증(`hyve-validate`)·인터페이스(`hyve-api`) 경계 확정** (2026-11-18): `00-overview.md`, `02-architecture.md`
 - **crates.io 비충돌 고유명 `hyve`(구 `hyper`) 및 순수 `MIT` 라이선스 확정** (2026-11-19): 레포명·crates.io 패키지명·Rust 크레이트명·CLI명을 `hyve`로 1:1 일치
 - **MIT 포크 스택(`rkyv`·`reactive_graph`·`winnow`·`ariadne`·`ulid`·`bytemuck`·`rtrb`/`crossbeam-queue`), `reactive_graph` SoA 내부 개조 방향 및 Phase 1~3 우선순위 컷 확정** (2026-11-19):
-  - Phase 1(`v0.1.0`): `hyve-core`·`hyve-state`·`hyve-serde`(`rkyv`+JSON)·`hyve-validate`·`hyve-macros`(`#[model]`·`#[validate]`·`#[hyve::test]`·`#[server]`)·`hyve-api`·`hyve-parser`·`hyve-diagnostics`·`hyve-config`·`hyve-cli`(`init`·`preview` 기본 실행·`test`·`build` 기본)
-  - Phase 2(`v0.2.0`): `hyve preview` 상태 보존 HMR·`hyve lint`·`asset!`·`hyve-trace`·`SharedRingBuf` OS `shm` IPC
+  - Phase 1(`v0.1.0`): `hyve-core`·`hyve-state`·`hyve-serde`(`rkyv`+JSON)·`hyve-validate`·`hyve-macros`(`#[model]`·`#[validate]`·`#[hyve::test]`·`#[server]`)·`hyve-api`·`hyve-parser`·`hyve-diagnostics`·`hyve-config`·`hyve-cli`(`init`·`dev` 기본 실행·`test`·`build` 기본)
+  - Phase 2(`v0.2.0`): `hyve dev` 상태 보존 HMR·`hyve lint`·`asset!`·`hyve-trace`·`SharedRingBuf` OS `shm` IPC
   - Phase 3(`v0.3.0+`): 바이너리 핫패칭·스토어 패키징·코드 사이닝·델타 업데이터 (`02-architecture.md` §3)
-- **Phase 1 의존 폐포 보정** (2026-11-24): `orbic`·`serge`의 Phase 1이 필요로 하는 `hyve-macros`·`hyve-api`와 매크로의 빌드 의존성인 `hyve-parser`·`hyve-diagnostics`를 Phase 1에 포함(위 목록에 반영). `serge` Phase 1의 `serge-web-dev`가 붙을 수 있도록 `hyve preview`의 기본 실행(HMR 없는 실행·재시작)도 Phase 1에 두고, 상태 보존 HMR은 Phase 2 유지. `asset!`는 Phase 2 유지
+- **Phase 1 의존 폐포 보정** (2026-11-24): `orbic`·`serge`의 Phase 1이 필요로 하는 `hyve-macros`·`hyve-api`와 매크로의 빌드 의존성인 `hyve-parser`·`hyve-diagnostics`를 Phase 1에 포함(위 목록에 반영). `serge` Phase 1의 `serge-web-dev`가 붙을 수 있도록 `hyve dev`의 기본 실행(HMR 없는 실행·재시작)도 Phase 1에 두고, 상태 보존 HMR은 Phase 2 유지. `asset!`는 Phase 2 유지
 - **`#[server]` 매크로 소유와 해석 경계 확정** (2026-11-24): `#[server]`/`#[server_ctx]`는 `hyve-macros`가 소유. 메서드·경로 인자는 `hyve`가 해석하지 않는 바인딩 메타데이터이며 `orbic`만 HTTP 라우트로 해석 (`02-architecture.md` §1, §2.4, `03-adapters-and-pipeline.md` §2)
 - **포크 표 보정** (2026-11-24): `slotmap`(`Zlib` 단독)은 포크 대상에서 제외하고 아레나 설계 레퍼런스로만 사용(아레나는 자체 구현). `rtrb` 라이선스 기재, 표의 버전은 확인 시점 스냅샷으로 취급 (`02-architecture.md` §3)
 - **수명·호환·의존 규칙 추가(제안)** (2026-11-24): `Ctx<T>`와 시그널의 스코프 수명, 고속 레일의 스키마 일치 규칙, `hyve-parser`·`hyve-diagnostics`의 의존 방향을 `02-architecture.md` §2.1~§2.3에 **제안**으로 추가
