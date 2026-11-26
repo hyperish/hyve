@@ -1,6 +1,6 @@
 # 02. 아키텍처와 크레이트 구조 (hyve)
 
-> 상태: `apps/`·`crates/` 모노레포 및 코어 `ref` 역할은 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-24
+> 워크스페이스 구조, 코어의 기준 역할과 검증 문법은 **확정**입니다. 기존 크레이트 분할 제안은 각 절에 표시합니다. 기준일 2026-11-26
 
 `hyve` 레포는 Cargo 워크스페이스 기반의 모노레포(`apps/`, `crates/`)로 구성합니다(`hyperish/docs`의 `05-development-rules.md` §1).
 
@@ -9,7 +9,7 @@
 ```
 hyve/
   apps/
-    hyve-cli/          # `hyve` 바이너리 (대표 명령: init, preview, lint, test, build + 보조 codegen — 01-dx-and-dsl.md §2 참조)
+    hyve-cli/          # `hyve` 바이너리 (대표 명령: init, dev, lint, test, build + 보조 codegen — 01-dx-and-dsl.md §2 참조)
   crates/
     hyve/              # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
     hyve-core/         # 수명, 소유권, 오류, 취소 토큰, 기본 타입(Ulid, Timestamp), Lock-Free/Shm 공용 Ring Buffer(`SharedRingBuf`), Ctx<T>
@@ -57,8 +57,16 @@ hyve/
 - **단일 내부 바이너리 와이어 포맷 (`rkyv` 확정, 2026-11-19)**: 내부 직렬화는 `rkyv`(MIT, `bytecheck` 검증 기반 제로카피 역직렬화)를 단일 기준으로 사용해 Tier 2 Shm IPC·MSA·SSR 상태·고속 Dual-Rail을 한 코덱으로 통합하고, JSON(`serde_json`) 등 외부 표준 포맷은 어댑터로 분리합니다.
   - **호환 규칙 (제안)**: `rkyv` 아카이브는 스키마 진화를 지원하지 않으므로(공식 기능 비교표, 2026-11-24 확인: https://rkyv.org/feature-comparison) 고속 레일은 양쪽의 `#[model]` 스키마가 같을 때만 쓰고, 다르면 표준 레일(JSON 어댑터)로 폴백합니다(`hyperish/docs` `02-core-contracts.md` §5). 신뢰 경계를 넘어온 바이트는 `bytecheck` 검증을 거친 뒤에만 접근합니다. 포맷 제어 피처(엔디언 `little_endian`/`big_endian`, 정렬 `aligned`/`unaligned`, 포인터 폭 `pointer_width_16`/`32`/`64`)는 패밀리 전체에서 `little_endian` + `aligned` + `pointer_width_32` 한 조합으로 고정하고, 기본값에 기대지 않고 명시적으로 켭니다. 수신 측은 본문을 정렬된 버퍼로 받아 복사 없이 접근합니다. `usize`/`isize`는 타깃의 포인터 폭이 아니라 이 피처가 정한 폭(기본 32비트)으로 직렬화되므로, WASM(32비트)과 네이티브(64비트)가 같은 조합을 써야 같은 아카이브를 읽습니다(`rkyv` 크레이트 문서 "Format control", 2026-11-24 확인: https://docs.rs/rkyv/latest/rkyv/ · 피처 이름은 `cargo info rkyv@0.8.18`로 확인). `usize`/`isize`는 이 폭 차이 때문에 와이어 타입이 아닙니다. `#[model]` 필드와 `#[server]` 전송 인자에 쓰면 컴파일 타임 진단이며 `u32`/`u64`를 쓰라고 안내합니다(제안, 2026-11-24). 신뢰할 수 없는 바이트의 검증은 중첩 깊이 128을 넘으면 실패합니다. `rkyv`의 고수준 API는 깊이 한도 없이 검증하므로 `hyve-serde`가 한도를 둔 검증기를 직접 씁니다(제안, 2026-11-24). 스키마 지문은 `#[model]` 정의에서 컴파일 타임에 계산하며, 그 모델이 포함하는 모든 모델과 코덱 포맷 버전(위 포맷 제어 조합 포함)을 반영합니다. 지문을 싣는 자리와 불일치 시의 폴백은 `03-adapters-and-pipeline.md` §3이 정합니다.
   - **JSON 어댑터 (제안)**: `#[model]`의 JSON 표현은 값을 잃지 않습니다. 64비트 이상 정수는 JSON 수(배정밀도 부동소수)가 정확히 표현하는 범위 안이면 수로, 벗어나면 10진 문자열로 싣고, 디코더는 그런 필드에서 두 표현을 모두 받습니다. `NaN`과 무한대는 문자열 `"NaN"`, `"Infinity"`, `"-Infinity"`로 싣습니다. 그래서 같은 값이 두 레일에서 같은 결과를 내고, `version` 같은 흔한 정수 필드는 `hyperish/docs` `03-api-protocol.md`대로 JSON 수로 남습니다. 이 표현으로도 옮길 수 없는 타입(스트리밍 핸들 등)을 가진 모델은 JSON 어댑터 구현을 컴파일 타임에 거부합니다. `#[model]`의 JSON 필드명은 `camelCase`입니다(`hyperish/docs` `03-api-protocol.md` §1). 신뢰할 수 없는 입력을 받는 디코더는 중첩 깊이와 크기 한도를 가지며, 수치는 구현이 정하고 문서화합니다(Phase 1 기본값: 깊이 128, 16 MiB). 스키마가 없는 값(`Value`, 오류의 `details`)은 정수를 언제나 정확한 JSON 수로 싣고 부동소수는 언제나 소수점이나 지수를 붙여, 표준 레일을 거쳐도 고속 레일과 같은 값으로 복원됩니다. 문자열로 바꾸는 규칙은 필드 타입을 아는 `#[model]` 필드에만 적용합니다(제안, 2026-11-24).
-- `hyve-validate`는 웹/서버에 종속되지 않는 **범용 구조체·데이터 검증 및 스키마 리플렉션**(`len`, `range`, 패턴, 커스텀 불변조건 등)을 제공합니다. Phase 1의 `#[validate]` 문법은 `len = <범위>`와 `range = <범위>` 둘이며(`README.md` 예시), 패턴과 커스텀 불변조건의 문법은 Phase 2에서 정합니다. 그 밖의 키는 컴파일 타임 진단입니다(제안). 설정 파일, 에셋 데이터, UI 입력, 서버 요청 어디서든 동일하게 재사용됩니다.
+- `hyve-validate`는 설정·에셋·UI·서버에 같은 모델 검증과 스키마를 제공합니다. 필드에는 `len`, `range`, `pattern`, `check`를 쓸 수 있고 모델 전체에는 `check`를 쓸 수 있습니다. 알 수 없는 키는 컴파일 시 진단합니다. [패턴·불변조건 문법](#validation-rules)
 - `hyve-parser`는 매크로 구문 분석(`hyve-macros`, `serge-macros`, `orbic-macros`)과 런타임 스키마·에셋·데이터 포맷 파싱을 모두 뒷받침하는 저할당 파서 콤비네이터/토크나이저 기반을 제공합니다. `hyve-parser`와 `hyve-diagnostics`는 매크로 크레이트의 빌드 의존성이므로 `hyve-macros`나 진입 크레이트(`hyve`)에 의존하지 않습니다.
+
+<a id="validation-rules"></a>
+
+#### 패턴과 사용자 불변조건 (Phase 2 설계 확정, 2026-11-26)
+
+- 문자열 필드의 `#[validate(pattern = r"^[A-Z]{2}$")]`는 Rust `regex` 문법의 검색입니다. 전체 일치를 원하면 앵커를 씁니다. `String`과 `Option<String>`에 적용하고 `None`은 건너뜁니다. 매크로가 잘못된 패턴을 리터럴 위치에서 진단하고, 실행 시 같은 패턴은 한 번 컴파일해 재사용합니다. 실패한 규칙 이름은 `pattern`입니다. [regex의 문법](https://docs.rs/regex/1.13.2/regex/#syntax)
+- `#[validate(check = crate::is_valid)]` 필드 규칙은 `fn(&FieldType) -> bool`을, `#[model(check = crate::valid_interval)]`은 필드 간 관계를 검사하는 `fn(&Model) -> bool`을 받습니다. 동기·무부수효과 검증 함수이며 `false`는 해당 필드 경로 또는 모델 경로(루트는 `$`)의 `check` 위반입니다. 중첩 모델 아래에서는 기존 경로를 유지합니다. 기존 `Validate::validate_at`의 위반 목록에 누적하고 서버에서도 재검증합니다. [기존 오류와 경로 타입](../crates/hyve-validate/src/lib.rs)
+- 스키마에는 패턴 원문과 사용자 검증의 유무를 보존합니다. OpenAPI에는 `x-hyve-regex` 문자열과 `x-hyve-check: true`로 노출합니다. JSON Schema의 `pattern`은 다른 정규식 방언을 사용하며, 임의의 Rust 함수를 외부 스키마로 표현할 수 없습니다. 완료 기준은 네이티브·WASM의 동일 입력·오류 경로, 중첩 모델 실패, 잘못된 패턴·함수 서명의 컴파일 진단, OpenAPI 확장값 일치입니다. [JSON Schema 정규식](https://json-schema.org/understanding-json-schema/reference/regular_expressions)
 
 ### 2.4 `hyve-api` (범용 규격 인터페이스 통합)
 - 모듈·프로세스·네트워크 경계를 넘는 서비스·리소스·이벤트 계약(Contract)과 `#[server]` 인라인 서버 함수 계약을 정의합니다. `hyve` 자체는 HTTP나 OpenAPI 같은 특정 프로토콜 규격을 포함하지 않으며, 백엔드(`orbic`)가 이 범용 스키마·인터페이스를 읽어들여 컴포넌트 라우터 바인딩이나 OpenAPI 문서로 변환합니다. `#[server(POST "/projects")]`의 메서드·경로 인자도 `hyve`는 해석하지 않고 계약 디스크립터에 바인딩 메타데이터로 그대로 싣습니다. 이를 HTTP 라우트로 해석하는 주체는 `orbic`뿐입니다.
@@ -102,6 +110,11 @@ hyve/
 | `hyve-serde` (JSON) | `serde_json` 대신 자체 코덱 | §2.3의 JSON 규칙(손실 없는 수 표현, 입력 한도, `camelCase`)은 타입 단위로 두 레일에 똑같이 적용돼야 함. `serde` derive와 `serde_json`으로는 수 처리를 모든 경로에서 가로채는 래퍼가 필요하므로, `#[model]`이 인코더·디코더를 직접 생성하는 한 단계 경로가 더 적은 변환과 의존으로 끝남. 확정된 "외부 어댑터 `serde_json`"을 바꾼 것 |
 | `hyve-state` | `reactive_graph`를 레퍼런스로 삼은 자체 구현 | 개조 방향이 런타임과 아레나를 통째로 바꾸는 것이라 원본을 감쌀 수 없음. 원본은 프리릴리스(`0.3.0-rc1`)이고 `rust-version`이 `1.88`이며 비동기 런타임 계열 의존(`any_spawner`, `futures`, `async-lock`)과 `slotmap`(`Zlib`)을 끌어옴(2026-11-24 `cargo tree` 확인). 표의 SoA 분리(값 배열·구독자 비트셋)는 하지 않음(확정의 실행 방식을 바꿈, 2026-11-25): 원본 대비 측정에서 느린 시나리오가 없고, 드러난 병목은 값 배치가 아니라 재실행의 간선·범위 정리였으므로 그것을 고침(`05-implementation-plan.md` 원본 대비 측정) |
 | `hyve-core` | `Ulid`와 `SharedRingBuf<T>`는 자체 구현, `bytemuck` `=1.25.2` 고정 의존 | `ulid` 크레이트는 `rand`를 끌어오고 규격이 작음. `rtrb`·`crossbeam-queue`는 소비형 큐라서, 최신 샘플을 덮어쓰고 찢어짐 없이 스냅샷하는 `SharedRingBuf`의 의미와 다름. 두 크레이트는 레퍼런스로만 씀 |
-| `hyve-parser`, `hyve-diagnostics` | `winnow` `=1.0.5`, `ariadne` `=0.6.0` 고정 의존 | 개조 방향이 공개 API로 됨 |
+| `hyve-parser` | winnow 1.0.5의 완전 입력 ASCII 토큰 루프를 MIT 소스로 편입 | 시간 리터럴과 dotenv 이름의 슬라이스·스팬을 유지합니다. 기준 커밋, 라이선스와 비교 방법은 [포크 기록](05-implementation-plan.md#파서-비교)에 있습니다. |
+| `hyve-diagnostics` | ariadne 0.6.0의 단일 소스 캐시 편입 | 이름을 빌려 쓰고 같은 파일의 모든 오류가 행 인덱스 하나를 공유합니다. |
 
 외부 의존성(포크하지 않음, 2026-11-24 `cargo info` 확인): `tokio` (`1.54.1`, `MIT`), `syn` (`2.0.119`, `MIT OR Apache-2.0`. `3.0.10`이 있지만 `rkyv`의 의존 트리가 `syn` 2(`munge_macro`)와 3(`rkyv_derive`)을 모두 끌어와 어느 쪽을 써도 추가 컴파일이 없으므로 널리 쓰이는 2를 씀, 2026-11-24 `Cargo.lock` 확인), `quote` (`1.0.47`, `MIT OR Apache-2.0`), `proc-macro2` (`1.0.107`, `MIT OR Apache-2.0`), `bytecheck` (`0.8.3`, `MIT`), 컴파일 실패 테스트용 `trybuild` (`1.0.119`, `MIT OR Apache-2.0`. 최신 `1.0.125`는 `rust-version` `1.88`이라 리졸버 3이 최소 Rust 버전에 맞는 `1.0.119`를 고름. 진단 스냅샷은 안정 툴체인 CI에서만 비교), 난수 `getrandom` (`0.4.3`, `MIT OR Apache-2.0`, `wasm32-unknown-unknown`에서는 `wasm_js` 피처), 브라우저 시계 `js-sys` (`0.3.107`, `MIT OR Apache-2.0`, `wasm32-unknown-unknown` 전용), `wasm32` 테스트용 `wasm-bindgen-test` (`0.3.80`, `MIT OR Apache-2.0`). 이 목록에 없는 의존성은 `hyperish/docs` `05-development-rules.md` §7의 외부 의존성 규칙에 따라 추가 기록합니다.
+
+Phase 2 검증 설계에서 선택한 외부 크레이트는 `regex`(조사한 버전 1.13.2)입니다. Phase 3 개발 도구의 기반은 `subsecond`·`dioxus-devtools`·`dx`(검증한 조합 0.7.10)이며 `hyve` 코어의 런타임 의존성으로 두지 않습니다. 모두 MIT 선택이 가능한 외부 도구·의존성입니다(2026-11-26). [regex](https://crates.io/crates/regex/1.13.2) · [Subsecond](https://crates.io/crates/subsecond/0.7.10) · [Dioxus CLI 릴리스](https://github.com/DioxusLabs/dioxus/releases/tag/v0.7.10)
+
+2026-11-26에 `hyve-core`의 POD 바이트 뷰와 `hyve-serde`의 정렬 작업 버퍼도 소스 모듈로 편입했습니다. `Pod` 파생과 아카이브 타입·레이아웃은 기존 고정 버전을 사용합니다. [측정과 출처](05-implementation-plan.md#코어-소스-편입-측정)
