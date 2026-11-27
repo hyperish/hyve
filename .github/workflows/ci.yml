@@ -187,6 +187,7 @@ jobs:
         working-directory: serge
         env:
           HYVE_ANDROID_SIGNING_ALIAS: package-test
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2g
         run: |
           export PATH="$CARGO_TARGET_DIR/debug:$PATH"
           export CARGO_APK_RELEASE_KEYSTORE="$RUNNER_TEMP/hyve-release.p12"
