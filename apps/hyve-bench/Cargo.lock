@@ -280,14 +280,14 @@ checksum = "735eaa21a6a5ffb2e84362faaeb90c05ba8e19797ca30428478cb6ea3a4921bc"
 
 [[package]]
 name = "hyve"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-api",
  "hyve-config",
- "hyve-core 0.1.0-alpha.1",
- "hyve-diagnostics 0.1.0-alpha.1",
+ "hyve-core 0.1.0",
+ "hyve-diagnostics 0.1.0",
  "hyve-macros",
- "hyve-parser 0.1.0-alpha.1",
+ "hyve-parser 0.1.0",
  "hyve-serde",
  "hyve-state",
  "hyve-trace",
@@ -296,9 +296,9 @@ dependencies = [
 
 [[package]]
 name = "hyve-api"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
- "hyve-core 0.1.0-alpha.1",
+ "hyve-core 0.1.0",
  "hyve-serde",
  "hyve-validate",
 ]
@@ -310,11 +310,11 @@ dependencies = [
  "bytemuck",
  "crossbeam-queue",
  "hyve",
+ "hyve-core 0.1.0",
  "hyve-core 0.1.0-alpha.1",
- "hyve-core 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyve-diagnostics 0.1.0",
  "hyve-diagnostics 0.1.0-alpha.1",
- "hyve-diagnostics 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "hyve-parser 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyve-parser 0.1.0-alpha.1",
  "hyve-serde",
  "hyve-state",
  "reactive_graph",
@@ -327,23 +327,13 @@ dependencies = [
 
 [[package]]
 name = "hyve-config"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
- "hyve-core 0.1.0-alpha.1",
- "hyve-diagnostics 0.1.0-alpha.1",
- "hyve-parser 0.1.0-alpha.1",
+ "hyve-core 0.1.0",
+ "hyve-diagnostics 0.1.0",
+ "hyve-parser 0.1.0",
  "hyve-serde",
  "hyve-validate",
-]
-
-[[package]]
-name = "hyve-core"
-version = "0.1.0-alpha.1"
-dependencies = [
- "bytemuck",
- "getrandom",
- "js-sys",
- "rkyv",
 ]
 
 [[package]]
@@ -359,10 +349,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyve-diagnostics"
-version = "0.1.0-alpha.1"
+name = "hyve-core"
+version = "0.1.0"
 dependencies = [
- "ariadne",
+ "bytemuck",
+ "getrandom",
+ "js-sys",
+ "rkyv",
 ]
 
 [[package]]
@@ -375,10 +368,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyve-macros"
-version = "0.1.0-alpha.1"
+name = "hyve-diagnostics"
+version = "0.1.0"
 dependencies = [
- "hyve-diagnostics 0.1.0-alpha.1",
+ "ariadne",
+]
+
+[[package]]
+name = "hyve-macros"
+version = "0.1.0"
+dependencies = [
+ "hyve-diagnostics 0.1.0",
  "proc-macro2",
  "quote",
  "regex",
@@ -388,44 +388,44 @@ dependencies = [
 [[package]]
 name = "hyve-parser"
 version = "0.1.0-alpha.1"
-dependencies = [
- "hyve-diagnostics 0.1.0-alpha.1",
-]
-
-[[package]]
-name = "hyve-parser"
-version = "0.1.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f53173d6eca90d5f4d3dff30970d0dbaad547cf69a9418c4c6aa16923f3e0ccd"
 dependencies = [
- "hyve-diagnostics 0.1.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyve-diagnostics 0.1.0-alpha.1",
  "winnow",
 ]
 
 [[package]]
-name = "hyve-serde"
-version = "0.1.0-alpha.1"
+name = "hyve-parser"
+version = "0.1.0"
 dependencies = [
- "hyve-core 0.1.0-alpha.1",
+ "hyve-diagnostics 0.1.0",
+]
+
+[[package]]
+name = "hyve-serde"
+version = "0.1.0"
+dependencies = [
+ "hyve-core 0.1.0",
  "rkyv",
 ]
 
 [[package]]
 name = "hyve-state"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 
 [[package]]
 name = "hyve-trace"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
- "hyve-core 0.1.0-alpha.1",
+ "hyve-core 0.1.0",
 ]
 
 [[package]]
 name = "hyve-validate"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
- "hyve-core 0.1.0-alpha.1",
+ "hyve-core 0.1.0",
  "regex",
 ]
 

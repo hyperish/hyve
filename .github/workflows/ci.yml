@@ -9,8 +9,8 @@ on:
 
 env:
   # Use the sibling revisions exercised together in platform acceptance.
-  ORBIC_REF: d606b1a03405d83c4ac086c58d8d8c2434237474
-  SERGE_REF: 1c6d1e2cba14acb2db8b675afadd5c2c9a404dad
+  ORBIC_REF: 1caa7b43b0a3d234f705e702feee78e656d5185c
+  SERGE_REF: 41bed229409b2623851084c1b2669bba533772d2
   CARGO_TERM_COLOR: always
   # Must match `rust-version` in Cargo.toml (hyperish/docs 05-development-rules.md §8).
   MSRV: "1.85"
@@ -187,6 +187,7 @@ jobs:
         working-directory: serge
         env:
           HYVE_ANDROID_SIGNING_ALIAS: package-test
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2g
         run: |
           export PATH="$CARGO_TARGET_DIR/debug:$PATH"
           export CARGO_APK_RELEASE_KEYSTORE="$RUNNER_TEMP/hyve-release.p12"

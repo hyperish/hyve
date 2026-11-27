@@ -266,7 +266,7 @@ checksum = "735eaa21a6a5ffb2e84362faaeb90c05ba8e19797ca30428478cb6ea3a4921bc"
 
 [[package]]
 name = "hyve"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-api",
  "hyve-config",
@@ -286,7 +286,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-api"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-core",
  "hyve-serde",
@@ -295,7 +295,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-cli"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-core",
  "hyve-diagnostics",
@@ -306,7 +306,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-config"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-core",
  "hyve-diagnostics",
@@ -317,7 +317,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-core"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "bytemuck",
  "getrandom 0.4.3",
@@ -332,14 +332,14 @@ dependencies = [
 
 [[package]]
 name = "hyve-diagnostics"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "ariadne",
 ]
 
 [[package]]
 name = "hyve-macros"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-diagnostics",
  "proc-macro2",
@@ -350,14 +350,14 @@ dependencies = [
 
 [[package]]
 name = "hyve-parser"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-diagnostics",
 ]
 
 [[package]]
 name = "hyve-serde"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-core",
  "rkyv",
@@ -366,14 +366,14 @@ dependencies = [
 
 [[package]]
 name = "hyve-state"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "wasm-bindgen-test",
 ]
 
 [[package]]
 name = "hyve-tests"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve",
  "trybuild",
@@ -382,21 +382,21 @@ dependencies = [
 
 [[package]]
 name = "hyve-tests-indirect"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-tests",
 ]
 
 [[package]]
 name = "hyve-trace"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-core",
 ]
 
 [[package]]
 name = "hyve-update"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "fs2",
  "qbsdiff",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-validate"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "hyve-core",
  "regex",

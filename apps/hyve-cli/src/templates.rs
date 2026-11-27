@@ -11,8 +11,8 @@ pub(crate) const TEMPLATES: [&str; 3] = ["fullstack", "serge-app", "orbic-servic
 /// (`docs/01-dx-and-dsl.md` §2: the versions a template writes are the ones
 /// tested with that CLI release).
 pub(crate) const HYVE: &str = env!("CARGO_PKG_VERSION");
-pub(crate) const ORBIC: &str = "0.1.0-alpha.1";
-pub(crate) const SERGE: &str = "0.1.0-alpha.1";
+pub(crate) const ORBIC: &str = "0.1.0";
+pub(crate) const SERGE: &str = "0.1.0";
 /// serge's `wasm-bindgen`: the CLI that builds the page must match it.
 pub(crate) const WASM_BINDGEN: &str = "0.2.130";
 
